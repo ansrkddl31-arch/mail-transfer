@@ -1,0 +1,138 @@
+{
+  "Attachments.ps1": {
+    "v18.2_sha256": "9477abf6435a30ec459c783352ece8436453039807bfb4e9d3d4f636d23ab30a",
+    "vs_v17.2": "same"
+  },
+  "Calendar.ps1": {
+    "v18.2_sha256": "324286aa31b9e9d7a10c50fd83cf71da62f8d12d66c6cb00c1c4cce401ee7bfe",
+    "vs_v17.2": "same"
+  },
+  "ChatBridge.ps1": {
+    "v18.2_sha256": "e87fc8e0086dac55d993dc22cbff425027bc363a66f585902bcbdc43c13639e2",
+    "vs_v17.2": "added"
+  },
+  "ChatGPT-Dom.js": {
+    "v18.2_sha256": "2b9d0831b4c3c6cb91fe5fd4af83099e7bec8bea6ad45571ff4482f13b538f9f",
+    "vs_v17.2": "added"
+  },
+  "ChatGPT-Web.ps1": {
+    "v18.2_sha256": "963848581a16fa70795431269e21660287432c7a004a9546f1f757200dec3e49",
+    "vs_v17.2": "added"
+  },
+  "CollectionFilter.ps1": {
+    "v18.2_sha256": "1881be4878d0ccbb08b26ed8a84d60c61a860098d8f4d7b5f8ec18b0639386e3",
+    "vs_v17.2": "same"
+  },
+  "Collector.ps1": {
+    "v18.2_sha256": "b4daa36fc901e0a622a737ca2093cc19d01ea7f280e0e1e3b5f8ca14282b2ef7",
+    "vs_v17.2": "same"
+  },
+  "Common.ps1": {
+    "v18.2_sha256": "648d707f8f6e98e325c5a86b063c413b3762880b5ef058f0fc746e60a7c0719a",
+    "vs_v17.2": "changed"
+  },
+  "Diagnose-MailTransfer.ps1": {
+    "v18.2_sha256": "9f6b5c276b4cf594e630cbb7b9422efb454b8b75fe6c2a72bd212dd0438fe6c7",
+    "vs_v17.2": "changed"
+  },
+  "External-Worker.ps1": {
+    "v18.2_sha256": "9543b7348f70cb9c547eaffc6a38b1f97177b785057e78640e74ca970a29db75",
+    "vs_v17.2": "changed"
+  },
+  "InputGuard.cs": {
+    "v18.2_sha256": "07100ac98622975c7dfd40eac51efc6872e353227d2f8ceebab4b8e19c9842bc",
+    "vs_v17.2": "same"
+  },
+  "InputGuard.ps1": {
+    "v18.2_sha256": "bd3cb5a6a07d71b8735abe91a17cded78aa963ff763e4bb33a826f4dd3d7db87",
+    "vs_v17.2": "same"
+  },
+  "KeepAwake.ps1": {
+    "v18.2_sha256": "3b4f23e44aebbdf0a7a936476bd040bf94e053b10c998b8bde76e888d84d435a",
+    "vs_v17.2": "same"
+  },
+  "MailAssistant.ps1": {
+    "v18.2_sha256": "56802be6e3711bd594fa632253413219b326c6d7dc3bf27084852af2ac4fdb14",
+    "vs_v17.2": "same"
+  },
+  "OperationTrace.ps1": {
+    "v18.2_sha256": "62913e09417048cc362a6e77f99540f3cf9837dd19af2cdd70cc383d6acf2b35",
+    "vs_v17.2": "changed"
+  },
+  "Send-Packet.ps1": {
+    "v18.2_sha256": "38c06bd651fe1bde3757d1506001a4af266de3809891247a8caba8f99e88c9fb",
+    "vs_v17.2": "same"
+  },
+  "Setup-Transfer.ps1": {
+    "v18.2_sha256": "26faea039f084bb98f2248eb41fe8a2b0e2983bb5567e4baab4ec63f27f24952",
+    "vs_v17.2": "same"
+  },
+  "Setup.ps1": {
+    "v18.2_sha256": "d7891df45a2a9d1263c3df4c63affed28d4f9ed9fb11d593e4974e23ff31baf5",
+    "vs_v17.2": "same"
+  },
+  "Start-Bridge.ps1": {
+    "v18.2_sha256": "cd0269dce358df67d383cbf69985ce9f881309afbd234249d7a33d388b028436",
+    "vs_v17.2": "changed"
+  },
+  "Start-External.ps1": {
+    "v18.2_sha256": "7db4b564298efaf9b5c3afc3295657c32fc97cb570ab3fde4dc921ada450cefb",
+    "vs_v17.2": "changed"
+  },
+  "Start-Internal.ps1": {
+    "v18.2_sha256": "60d20d26481f132005c7d0d8e3a4dcf6994a108441e4f3b5e1933630e026d454",
+    "vs_v17.2": "changed"
+  },
+  "Start-Webmail.ps1": {
+    "v18.2_sha256": "58873eb52699ee44d70b7e94b053b33fbe6f51216a2da71f2486b95ec4083199",
+    "vs_v17.2": "same"
+  },
+  "Test-AiWeb.ps1": {
+    "v18.2_sha256": "d5033e60025ceda6ac2bc019e3d722bc9e75c040581073b28d13bc3f935bf9c9",
+    "vs_v17.2": "added"
+  },
+  "Test-InputGuard.ps1": {
+    "v18.2_sha256": "6922928346b854f7c965a60380692d6c6045174a5fad0b77dc01177530a8e814",
+    "vs_v17.2": "same"
+  },
+  "Test-Send.ps1": {
+    "v18.2_sha256": "f2e7661da88e0ce70cdc44d17493f46a7aa8becf2cf1b696ef8ce44763313b2f",
+    "vs_v17.2": "same"
+  },
+  "Transfer.External.ps1": {
+    "v18.2_sha256": "0fdb4dc7335072919e9e8e7ec844fad6ccbf0f7e574971b7a6e2b0edef2c4572",
+    "vs_v17.2": "same"
+  },
+  "Transfer.Helpers.ps1": {
+    "v18.2_sha256": "c3ac2dbff885ae45d35070632f925d63d3d8c3639947b63bab632a0707eef21a",
+    "vs_v17.2": "same"
+  },
+  "Transfer.Startup.ps1": {
+    "v18.2_sha256": "ddfaf0b7a7b1ab4ac542ad798b96d659a45effa916f7ce12d2b7bc3914c2dba1",
+    "vs_v17.2": "same"
+  },
+  "Transfer.TestCore.ps1": {
+    "v18.2_sha256": "6fa342bbe525b4f9ccef48c1b23a4b953813acab86cb9285317de5df0716f867",
+    "vs_v17.2": "same"
+  },
+  "app.html": {
+    "v18.2_sha256": "bcdd8b03491a42f29f5f5b3529e66803af4fe46f9f142c7fdd3ed090630c0042",
+    "vs_v17.2": "changed"
+  },
+  "사용방법.txt": {
+    "v18.2_sha256": "0b6ad1dba88733578e554d697afba3cfa1d0e11f7b2b1cac8288f1872b7373bb",
+    "vs_v17.2": "changed"
+  },
+  "시작.bat": {
+    "v18.2_sha256": "43370fb2b99d6c04dcdfa14110462a05ed5299a1d65574c7a840146a18b6c3ee",
+    "vs_v17.2": "changed"
+  },
+  "입력보호확인.bat": {
+    "v18.2_sha256": "6736331ee5185e91abc662b445c0cb5c80f1ae8956a0a2516620907af6c8eabc",
+    "vs_v17.2": "same"
+  },
+  "진단확인.bat": {
+    "v18.2_sha256": "cffff5d4479e7e808037fad10c38723fd97705ce9053ecd87a16a393ac79aa70",
+    "vs_v17.2": "same"
+  }
+}
