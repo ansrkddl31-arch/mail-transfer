@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 .test-output/
 bridge-settings.json
+tools/transfer-image-probe/logs/
