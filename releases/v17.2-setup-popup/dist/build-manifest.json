@@ -1,0 +1,39 @@
+{
+  "base": "user supplied v17.2 HTML",
+  "revision": "v17.2-위치설정수정1",
+  "changed_program_files": [
+    "app.html"
+  ],
+  "sha256": {
+    "Attachments.ps1": "9477abf6435a30ec459c783352ece8436453039807bfb4e9d3d4f636d23ab30a",
+    "Calendar.ps1": "324286aa31b9e9d7a10c50fd83cf71da62f8d12d66c6cb00c1c4cce401ee7bfe",
+    "CollectionFilter.ps1": "1881be4878d0ccbb08b26ed8a84d60c61a860098d8f4d7b5f8ec18b0639386e3",
+    "Collector.ps1": "b4daa36fc901e0a622a737ca2093cc19d01ea7f280e0e1e3b5f8ca14282b2ef7",
+    "Common.ps1": "f418d32f62e94a763d03027502bb6b16523ff18854c9a8c5544317a3b84f1527",
+    "Diagnose-MailTransfer.ps1": "78f1f8c992ef938e0bc0c2ccb2c4114b072724488827e523c71d008d75ba704d",
+    "External-Worker.ps1": "63d3a5331f98bf87e55fca320fd0bdc81766e10f0708a4dd42617d4b877acd77",
+    "InputGuard.cs": "07100ac98622975c7dfd40eac51efc6872e353227d2f8ceebab4b8e19c9842bc",
+    "InputGuard.ps1": "bd3cb5a6a07d71b8735abe91a17cded78aa963ff763e4bb33a826f4dd3d7db87",
+    "KeepAwake.ps1": "3b4f23e44aebbdf0a7a936476bd040bf94e053b10c998b8bde76e888d84d435a",
+    "MailAssistant.ps1": "56802be6e3711bd594fa632253413219b326c6d7dc3bf27084852af2ac4fdb14",
+    "OperationTrace.ps1": "13024a98fcc1f36037aec6818ad544b13a827913577eb99755c7800259df5bb0",
+    "Send-Packet.ps1": "38c06bd651fe1bde3757d1506001a4af266de3809891247a8caba8f99e88c9fb",
+    "Setup-Transfer.ps1": "26faea039f084bb98f2248eb41fe8a2b0e2983bb5567e4baab4ec63f27f24952",
+    "Setup.ps1": "d7891df45a2a9d1263c3df4c63affed28d4f9ed9fb11d593e4974e23ff31baf5",
+    "Start-Bridge.ps1": "4c1c6d3b48db2f9456d44581c41130a2b224f4d84bc0d01de0e9da2fa051c745",
+    "Start-External.ps1": "559f0b72e88bc16c0ddf46c685df52539e249f7d99323dcc409dbb00a1281b22",
+    "Start-Internal.ps1": "4264a4fe2a81386a4b9b438550c2b48d18744c59b80591f9a26d5dad6dd190a8",
+    "Start-Webmail.ps1": "58873eb52699ee44d70b7e94b053b33fbe6f51216a2da71f2486b95ec4083199",
+    "Test-InputGuard.ps1": "6922928346b854f7c965a60380692d6c6045174a5fad0b77dc01177530a8e814",
+    "Test-Send.ps1": "f2e7661da88e0ce70cdc44d17493f46a7aa8becf2cf1b696ef8ce44763313b2f",
+    "Transfer.External.ps1": "0fdb4dc7335072919e9e8e7ec844fad6ccbf0f7e574971b7a6e2b0edef2c4572",
+    "Transfer.Helpers.ps1": "c3ac2dbff885ae45d35070632f925d63d3d8c3639947b63bab632a0707eef21a",
+    "Transfer.Startup.ps1": "ddfaf0b7a7b1ab4ac542ad798b96d659a45effa916f7ce12d2b7bc3914c2dba1",
+    "Transfer.TestCore.ps1": "6fa342bbe525b4f9ccef48c1b23a4b953813acab86cb9285317de5df0716f867",
+    "app.html": "c3934a7718535569cee7f9d1c4f2446573a6d76ac2216c282028aaff33b8d25b",
+    "사용방법.txt": "7ae0bf7f5a9e74ed55b8f4f551c4f09adc273d26cf6086f973fb204e0a855bd9",
+    "시작.bat": "c9e9b611ba11d6b562e88d97c1f19a44f29b4e5cb5af5485f3857bc972286d35",
+    "입력보호확인.bat": "6736331ee5185e91abc662b445c0cb5c80f1ae8956a0a2516620907af6c8eabc",
+    "진단확인.bat": "cffff5d4479e7e808037fad10c38723fd97705ce9053ecd87a16a393ac79aa70"
+  }
+}
