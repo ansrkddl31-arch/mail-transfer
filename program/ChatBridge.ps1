@@ -37,7 +37,7 @@ function Unprotect-ChatPayload {
 function Get-ChatErrorText {
  param([string]$Code)
  switch($Code){
-  'CHAT_EXTERNAL_UPDATE_REQUIRED' {'외부 프로그램의 AI 웹 지원이 확인되지 않았습니다. 양쪽을 v18.2로 업데이트하고 외부 연결을 다시 확인하세요.'}
+  'CHAT_EXTERNAL_UPDATE_REQUIRED' {'외부 프로그램의 AI 웹 지원이 확인되지 않았습니다. 양쪽을 v18.2-r1로 업데이트하고 외부 연결을 다시 확인하세요.'}
   'CHAT_LOGIN_REQUIRED' {'외부 PC의 선택한 AI 전용 Edge 창에서 로그인한 뒤 이미 로그인함을 누르세요.'}
   'CHAT_MODEL_UNAVAILABLE' {'선택한 모델로 변경됐는지 확인하지 못했습니다. 외부 AI 화면에서 모델을 확인하고 로그인 상태를 다시 확인하세요.'}
   'CHAT_ATTACHMENT_UNSUPPORTED' {'현재 AI 화면의 파일 첨부 입력을 찾지 못했습니다. 이번 질문은 보내지 않았습니다.'}

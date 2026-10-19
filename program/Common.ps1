@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Attachments.ps1')
 . (Join-Path $PSScriptRoot 'MailAssistant.ps1')
 . (Join-Path $PSScriptRoot 'Calendar.ps1')
+. (Join-Path $PSScriptRoot 'Recovery.ps1')
 . (Join-Path $PSScriptRoot 'ChatBridge.ps1')
 . (Join-Path $PSScriptRoot 'ChatGPT-Web.ps1')
 . (Join-Path $PSScriptRoot 'CollectionFilter.ps1')
@@ -18,6 +19,7 @@ function Write-BridgeJson {
         [IO.File]::WriteAllText($temp, ($Value | ConvertTo-Json -Depth 100 -Compress), (New-Object Text.UTF8Encoding($true)))
         if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temp, $Path, [NullString]::Value) }
         else { [IO.File]::Move($temp, $Path) }
+        if([IO.Path]::GetFileName($Path)-ieq'bridge-settings.json'){[void](Save-EXMailRecoveryConfiguration $Path)}
     } finally { if (Test-Path -LiteralPath $temp) { [IO.File]::Delete($temp) } }
 }
 function Read-BridgeJson {
@@ -199,8 +201,22 @@ function Read-BridgeInbox {
     }
 }
 
+function Write-BridgeErrorLog {
+ param([string]$StateDirectory,[string]$Stage,[string]$Code,[string]$RequestId='')
+ try{
+  $Code=$Code.ToUpperInvariant()
+  if($Stage-cnotmatch'^[A-Z_]{1,80}$'-or$Code-cnotmatch'^[A-Z][A-Z0-9_]{0,100}$'){return}
+  if(-not$script:BridgeErrorLogThrottle){$script:BridgeErrorLogThrottle=@{}}
+  $key=$Stage+':'+$Code+':'+$RequestId;$now=[DateTime]::UtcNow
+  if($script:BridgeErrorLogThrottle.ContainsKey($key)-and($now-$script:BridgeErrorLogThrottle[$key]).TotalSeconds-lt60){return}
+  if($script:BridgeErrorLogThrottle.Count-gt1000){$script:BridgeErrorLogThrottle.Clear()};$script:BridgeErrorLogThrottle[$key]=$now
+  $folder=Join-Path $StateDirectory 'logs';[void][IO.Directory]::CreateDirectory($folder)
+  $entry=@{at=$now.ToString('o');stage=$Stage;code=$Code};if(Test-BridgeId $RequestId){$entry.requestId=$RequestId}
+  [IO.File]::AppendAllText((Join-Path $folder ('errors-'+(Get-Date -Format yyyyMMdd)+'.jsonl')),(($entry|ConvertTo-Json -Compress)+"`r`n"),(New-Object Text.UTF8Encoding($false)))
+ }catch{}
+}
 function Add-BridgeExchangeCleanup {
- param([string]$StateDirectory,[string]$Inbox,[ValidateSet('Internal','External')][string]$Role,[string]$RequestId,[string]$ReceivedPath)
+ param([string]$StateDirectory,[string]$Inbox,[ValidateSet('Internal','External')][string]$Role,[string]$RequestId,[string]$ReceivedPath,[int]$ProducerPid=0,[long]$ProducerStart=0)
  try{
   if(-not (Test-BridgeId $RequestId)){return}
   $folder=[IO.Path]::GetFullPath($Inbox).TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
@@ -208,7 +224,12 @@ function Add-BridgeExchangeCleanup {
   $prefix=if($Role -eq 'External'){'Request'}else{'Result'}
   $name=[IO.Path]::GetFileName($ReceivedPath)
   if($name -notmatch ('^MailTransfer-'+$prefix+'-'+[regex]::Escape($RequestId)+'(?: \([0-9]+\))?\.txt$')){return}
-  Write-BridgeJson (Join-Path $StateDirectory ('cleanup-'+$RequestId+'.json')) @{schemaVersion=1;kind='exchange-cleanup';role=$Role;requestId=$RequestId;inbox=$folder;receivedName=$name}
+  $sentPrefix=if($Role-eq'External'){'Result'}else{'Request'}
+  $connection=$false
+  foreach($candidate in @($ReceivedPath,(Join-Path (Join-Path $StateDirectory 'outbox') ('MailTransfer-'+$sentPrefix+'-'+$RequestId+'.txt')))){
+   if(Test-Path -LiteralPath $candidate){try{$packet=Read-BridgeJson $candidate;if($packet.requestId-ceq$RequestId-and$packet.kind-in@('key-request','public-key')){$connection=$true}}catch{}}
+  }
+  Write-BridgeJson (Join-Path $StateDirectory ('cleanup-'+$RequestId+'.json')) @{schemaVersion=1;kind='exchange-cleanup';role=$Role;requestId=$RequestId;inbox=$folder;receivedName=$name;connectionOnly=$connection;notBefore=[DateTime]::UtcNow.AddSeconds($(if($Role-eq'External'){15}else{0})).ToString('o');producerPid=$ProducerPid;producerStart=$ProducerStart}
  }catch{} # Deletion scheduling must not change the collection/send outcome.
 }
 function Remove-BridgeExchangePacket {
@@ -222,13 +243,13 @@ function Remove-BridgeExchangePacket {
   $file=Get-Item -LiteralPath $full
   if($file.Attributes -band [IO.FileAttributes]::ReparsePoint){return $false}
   $packet=Read-BridgeJson $full
-  $kinds=if($Prefix -eq 'Request'){@('key-request','mail-request','attachment-request')}else{@('public-key','mail-result','attachment-result')}
+  $kinds=if($Prefix -eq 'Request'){@('key-request','mail-request','attachment-request','chat-request')}else{@('public-key','mail-result','attachment-result','chat-result')}
   if($packet.schemaVersion -ne 4 -or $packet.requestId -cne $RequestId -or $packet.kind -notin $kinds){return $false}
   [IO.File]::Delete($full);return $true
  }catch{return $false}
 }
 function Invoke-BridgeExchangeCleanup {
- param([string]$StateDirectory,[string]$Inbox,[ValidateSet('Internal','External')][string]$Role)
+ param([string]$StateDirectory,[string]$Inbox,[ValidateSet('Internal','External')][string]$Role,[DateTime]$Now=[DateTime]::UtcNow)
  if([string]::IsNullOrWhiteSpace($StateDirectory) -or [string]::IsNullOrWhiteSpace($Inbox)){return}
  foreach($file in @(Get-ChildItem -LiteralPath $StateDirectory -Filter 'cleanup-*.json' -File -ErrorAction SilentlyContinue)){
   try{
@@ -237,6 +258,11 @@ function Invoke-BridgeExchangeCleanup {
    $id=[string]$task.requestId
    if(-not (Test-BridgeId $id) -or $file.Name -cne ('cleanup-'+$id+'.json') -or $task.schemaVersion -ne 1 -or $task.kind -cne 'exchange-cleanup' -or $task.role -cne $Role){continue}
    if(-not [string]::Equals([IO.Path]::GetFullPath([string]$task.inbox).TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar),[IO.Path]::GetFullPath($Inbox).TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar),[StringComparison]::OrdinalIgnoreCase)){continue}
+   $notBefore=[DateTime]::MinValue
+   if([DateTime]::TryParse([string]$task.notBefore,[ref]$notBefore)-and$Now-lt$notBefore.ToUniversalTime()){continue}
+   if($task.producerPid-gt0){
+    try{$producer=[Diagnostics.Process]::GetProcessById([int]$task.producerPid);if(-not$producer.HasExited-and$producer.StartTime.ToUniversalTime().Ticks-eq[long]$task.producerStart){continue}}catch{}finally{if($producer){$producer.Dispose();$producer=$null}}
+   }
    $receivedPrefix=if($Role -eq 'External'){'Request'}else{'Result'}
    $sentPrefix=if($Role -eq 'External'){'Result'}else{'Request'}
    $outbox=Join-Path $StateDirectory 'outbox'
@@ -251,7 +277,21 @@ function Invoke-BridgeExchangeCleanup {
      if(Test-Path -LiteralPath $path){try{$info=Get-Item -LiteralPath $path;if($info.Attributes -band [IO.FileAttributes]::ReparsePoint){$sidecarsRemoved=$false;continue};[IO.File]::Delete($path)}catch{$sidecarsRemoved=$false}}
     }
    }
+   # Remove only matching, validated duplicate gateway downloads for this completed exchange.
+   foreach($duplicate in @(Get-ChildItem -LiteralPath $Inbox -Filter ('MailTransfer-'+$receivedPrefix+'-'+$id+'*.txt') -File -ErrorAction SilentlyContinue)){
+    if($duplicate.Name-notmatch('^MailTransfer-'+$receivedPrefix+'-'+[regex]::Escape($id)+'(?: \([0-9]+\))?\.txt$')){continue}
+    if(-not(Remove-BridgeExchangePacket $duplicate.FullName $Inbox $id $receivedPrefix)){$receivedRemoved=$false}
+   }
+   if($receivedRemoved-and$sentRemoved-and$sidecarsRemoved-and$task.connectionOnly){
+    # A completed connection check does not need per-request success traces/status files.
+    $tracePath=Join-Path $StateDirectory ('worker-'+$id+'.trace.json')
+    if(Test-Path -LiteralPath $tracePath){try{$trace=Read-BridgeJson $tracePath 65536;if($trace.state-eq'failed'-and$trace.code){Write-BridgeErrorLog $StateDirectory 'CONNECTION_CHECK' ([string]$trace.code) $id}}catch{}}
+    foreach($metadata in @((Join-Path $StateDirectory ('worker-'+$id+'.status.json')),$tracePath,(Join-Path (Join-Path $StateDirectory 'logs') ('MailTransfer-Trace-'+$id+'.jsonl')))){
+     if(Test-Path -LiteralPath $metadata){try{$info=Get-Item -LiteralPath $metadata;if($info.Attributes-band[IO.FileAttributes]::ReparsePoint){$sidecarsRemoved=$false;continue};[IO.File]::Delete($metadata)}catch{$sidecarsRemoved=$false}}
+    }
+   }
    if($receivedRemoved -and $sentRemoved -and $sidecarsRemoved){[IO.File]::Delete($file.FullName)}
+   elseif($Now-gt$file.LastWriteTimeUtc.AddMinutes(1)){Write-BridgeErrorLog $StateDirectory 'EXCHANGE_CLEANUP' 'EXCHANGE_FILE_CLEANUP_DEFERRED' $id}
   }catch{} # Locked downloads or gateway reads are retried on the next poll/startup.
  }
 }
@@ -264,9 +304,28 @@ function Restore-BridgeExchangeCleanup {
    foreach($file in @(Get-ChildItem -LiteralPath (Join-Path $StateDirectory 'outbox') -Filter 'MailTransfer-Result-*.send.json' -File -ErrorAction SilentlyContinue)){
     if($file.Name -cnotmatch '^MailTransfer-Result-([a-f0-9]{32})\.send\.json$' -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)){continue}
     $id=$Matches[1]
-    try{$outcome=Read-BridgeJson $file.FullName -MaximumBytes 16384;if($outcome.result -eq 'SUBMITTED_UI_CONFIRMED' -and $outcome.clicked -eq $true){Add-BridgeExchangeCleanup $StateDirectory $Inbox $Role $id (Join-Path $Inbox ('MailTransfer-Request-'+$id+'.txt'))}}catch{}
+    try{
+     $outcome=Read-BridgeJson $file.FullName -MaximumBytes 16384
+     $connection=$false;$resultPath=Join-Path (Join-Path $StateDirectory 'outbox') ('MailTransfer-Result-'+$id+'.txt')
+     if(Test-Path -LiteralPath $resultPath){$oldResult=Read-BridgeJson $resultPath;$connection=($oldResult.kind-eq'public-key'-and$oldResult.requestId-ceq$id)}
+     if(($outcome.result-eq'SUBMITTED_UI_CONFIRMED'-and$outcome.clicked-eq$true)-or($connection-and$outcome.result-in@('FAILED','CANCELLED'))){
+      if($outcome.error){Write-BridgeErrorLog $StateDirectory 'REQUEST_SEND' ([string]$outcome.error) $id}
+      Add-BridgeExchangeCleanup $StateDirectory $Inbox $Role $id (Join-Path $Inbox ('MailTransfer-Request-'+$id+'.txt'))
+     }
+    }catch{}
    }
   }else{
+   foreach($entry in @(Read-BridgeInbox $Inbox)){if($entry.Packet.kind-eq'public-key'){Add-BridgeExchangeCleanup $StateDirectory $Inbox $Role ([string]$entry.Packet.requestId) $entry.File.FullName}}
+   foreach($oldSend in @(Get-ChildItem -LiteralPath (Join-Path $StateDirectory 'outbox') -Filter 'MailTransfer-Request-*.send.json' -File -ErrorAction SilentlyContinue)){
+    if($oldSend.Name-cnotmatch'^MailTransfer-Request-([a-f0-9]{32})\.send\.json$'-or($oldSend.Attributes-band[IO.FileAttributes]::ReparsePoint)){continue};$oldId=$Matches[1]
+    try{
+     $oldPacket=Read-BridgeJson (Join-Path (Join-Path $StateDirectory 'outbox') ('MailTransfer-Request-'+$oldId+'.txt'));$oldOutcome=Read-BridgeJson $oldSend.FullName 16384
+     if($oldPacket.kind-eq'key-request'-and$oldPacket.requestId-ceq$oldId-and$oldOutcome.result-in@('SUBMITTED_UI_CONFIRMED','FAILED','CANCELLED')){
+      if($oldOutcome.error){Write-BridgeErrorLog $StateDirectory 'REQUEST_SEND' ([string]$oldOutcome.error) $oldId}
+      Add-BridgeExchangeCleanup $StateDirectory $Inbox $Role $oldId (Join-Path $Inbox ('MailTransfer-Result-'+$oldId+'.txt'))
+     }
+    }catch{}
+   }
    $cache=Read-BridgeJson (Join-Path $StateDirectory 'last-mail-result.json')
    if($cache.schemaVersion -eq 4 -and $cache.kind -eq 'mail-result' -and $cache.status -eq 'success' -and (Test-BridgeId ([string]$cache.requestId))){Add-BridgeExchangeCleanup $StateDirectory $Inbox $Role ([string]$cache.requestId) (Join-Path $Inbox ('MailTransfer-Result-'+$cache.requestId+'.txt'))}
   }

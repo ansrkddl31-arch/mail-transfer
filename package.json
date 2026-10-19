@@ -1,0 +1,1 @@
+{"name":"exmail-explorer","version":"18.2.1","private":true,"scripts":{"build":"python tools/build.py","test:ui":"node tests/first-setup-r1.cjs"},"devDependencies":{"jsdom":"24.1.3"}}

@@ -32,7 +32,7 @@ try{
   $key=if($packet.kind-eq'attachment-request'){$null}else{Get-ExternalBridgeKey $StateDirectory}
   try{
    if($packet.kind -eq 'key-request'){
-    $result=@{schemaVersion=4;kind='public-key';release='bridge-v18.2';capabilities=@('ai-web-v1');requestId=$id;createdAt=[DateTime]::UtcNow.ToString('o');publicXml=$key.ToXmlString($false)}
+    $result=@{schemaVersion=4;kind='public-key';release='bridge-v18.2-r1';capabilities=@('ai-web-v1');requestId=$id;createdAt=[DateTime]::UtcNow.ToString('o');publicXml=$key.ToXmlString($false)}
    }elseif($packet.kind -eq 'attachment-request'){
     $result=Read-ExternalAttachmentRequest $packet $StateDirectory
    }elseif($packet.kind-eq'chat-request'){
@@ -86,7 +86,7 @@ try{
  }
  Set-OperationStep 'FINISH' 20
  $script:workerSendStatus='submitted'
- Add-BridgeExchangeCleanup $StateDirectory $Inbox 'External' $id $RequestPath
+ Add-BridgeExchangeCleanup $StateDirectory $Inbox 'External' $id $RequestPath -ProducerPid $PID -ProducerStart ([Diagnostics.Process]::GetCurrentProcess().StartTime.ToUniversalTime().Ticks)
  Invoke-BridgeExchangeCleanup $StateDirectory $Inbox 'External'
  $status=if($result.status){[string]$result.status}else{'success'}
  Complete-OperationTrace $(if($result.status-eq'failed'){[string]$result.error.code}else{''})
@@ -94,9 +94,17 @@ try{
 }catch{
  $code=$_.Exception.Message;if($code -cnotmatch '^[A-Z][A-Z0-9_]+$'){$code=$_.Exception.GetType().Name}
  Complete-OperationTrace $code
+ Write-BridgeErrorLog $StateDirectory 'EXTERNAL_WORKER' $code $id
  $script:workerSendStatus=if($code -eq 'TRANSFER_SUBMITTED_UNCONFIRMED'){'uncertain'}else{'failed'}
  $message=if(Get-Command Get-BridgeSendFailureMessage -ErrorAction SilentlyContinue){Get-BridgeSendFailureMessage $code}else{$code}
  $summary=if($script:workerCollectionStatus -eq 'partial'){'메일 '+$script:workerCollectedCount+'건 수집 · '+$script:workerFailedCount+'건 실패 · '}elseif($script:workerCollectionStatus -eq 'success'){'메일 '+$script:workerCollectedCount+'건 수집 완료 · ' }elseif($script:workerCollectionStatus -eq 'failed'){'메일 수집 실패 ('+$script:workerCollectionError+') · '}else{''}
  Write-WorkerStatus 'done' ($summary+'처리 실패: '+$message) $code
 }
-finally{Stop-MailInputGuard}
+finally{
+ Stop-MailInputGuard
+ if($packet-and$packet.kind-eq'key-request'-and(Test-BridgeId ([string]$packet.requestId))){
+  if(-not(Test-Path -LiteralPath (Join-Path $StateDirectory ('cleanup-'+$packet.requestId+'.json')))){
+   Add-BridgeExchangeCleanup $StateDirectory $Inbox 'External' ([string]$packet.requestId) $RequestPath -ProducerPid $PID -ProducerStart ([Diagnostics.Process]::GetCurrentProcess().StartTime.ToUniversalTime().Ticks)
+  }
+ }
+}

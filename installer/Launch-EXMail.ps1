@@ -4,7 +4,7 @@ function Test-EXMailRunning {
  $state=$null
  try{$state=Invoke-RestMethod 'http://127.0.0.1:8765/api/state' -TimeoutSec 2}catch{return $false}
  if($state.application-in@('mail-transfer-bridge','mail-transfer-internal')){
-  if($state.release-notin@('bridge-v18.2','internal-v18.2')){throw '구버전 프로그램이 실행 중입니다. 기존 PowerShell 창을 종료한 뒤 EX메일 익스플로러 바로가기를 다시 실행하세요. 새 앱 상단에는 앱 v18.2이 표시됩니다.'}
+  if($state.release-notin@('bridge-v18.2-r1','internal-v18.2-r1')){throw '구버전 프로그램이 실행 중입니다. 기존 PowerShell 창을 종료한 뒤 EX메일 익스플로러 바로가기를 다시 실행하세요. 새 앱 상단에는 앱 v18.2-r1이 표시됩니다.'}
   return $true
  }
  throw '8765 포트를 다른 프로그램이 사용하고 있습니다. 실행 중인 프로그램을 확인하세요.'

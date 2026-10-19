@@ -136,7 +136,7 @@ try{
    $resultPath=Join-Path $outbox ('MailTransfer-Result-'+$id+'.txt')
    if(Test-Path -LiteralPath $resultPath){$result=Read-BridgeJson $resultPath}
    elseif($packet.kind-eq'chat-request'){$result=Read-ExternalChatRequest $packet $StateDirectory $key}
-   elseif($packet.kind -eq 'key-request'){$result=@{schemaVersion=4;kind='public-key';release='bridge-v18.2';capabilities=@('ai-web-v1');requestId=$id;createdAt=[DateTime]::UtcNow.ToString('o');publicXml=$key.ToXmlString($false)}}
+   elseif($packet.kind -eq 'key-request'){$result=@{schemaVersion=4;kind='public-key';release='bridge-v18.2-r1';capabilities=@('ai-web-v1');requestId=$id;createdAt=[DateTime]::UtcNow.ToString('o');publicXml=$key.ToXmlString($false)}}
    else{
     Write-Host '메일 요청을 처리합니다. 로그인이 필요한 경우 생체 인증을 직접 완료하세요.'
     $result=Read-ExternalMailRequest $packet $profile $key

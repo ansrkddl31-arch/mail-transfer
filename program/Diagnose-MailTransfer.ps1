@@ -34,6 +34,17 @@ function Get-MailTransferDiagnostics {
  if($runtimeFolder -and -not[string]::Equals($runtimeFolder,$ProgramFolder,[StringComparison]::OrdinalIgnoreCase)){$lines.Add('NOTICE: diagnostic/update folder differs from running bridge folder.')}
  $role=if($null-ne$state){[string]$state.role}else{'External'}
  $roleFolder=Join-Path $BridgeStateRoot $role
+ # Errors-only summaries survive successful connection-file cleanup. Never copy arbitrary log lines.
+ $errorFile=Get-ChildItem -LiteralPath (Join-Path $roleFolder 'logs') -Filter 'errors-*.jsonl' -File -ErrorAction SilentlyContinue|Sort-Object LastWriteTimeUtc -Descending|Select-Object -First 1
+ if($errorFile-and-not($errorFile.Attributes-band[IO.FileAttributes]::ReparsePoint)){
+  try{
+   $stream=[IO.File]::OpenRead($errorFile.FullName)
+   try{$offset=[Math]::Max(0,$stream.Length-32768);[void]$stream.Seek($offset,[IO.SeekOrigin]::Begin);$reader=New-Object IO.StreamReader($stream);try{$tail=$reader.ReadToEnd()}finally{$reader.Dispose()}}finally{$stream.Dispose()}
+   foreach($row in @($tail-split"`n"|Select-Object -Last 20)){
+    try{$errorEntry=$row|ConvertFrom-Json;if([string]$errorEntry.stage-cmatch'^[A-Z_]{1,80}$'-and[string]$errorEntry.code-cmatch'^[A-Z][A-Z0-9_]{0,100}$'){$lines.Add('errorLog: '+$errorEntry.stage+' / '+$errorEntry.code+$(if([string]$errorEntry.requestId-cmatch'^[a-f0-9]{32}$'){' / '+$errorEntry.requestId}else{''}))}}catch{}
+   }
+  }catch{}
+ }
  # Trace files are written before blocking calls, independently of terminal status.
  $traceFiles=@(Get-ChildItem -LiteralPath $roleFolder -Filter 'worker-*.trace.json' -File -ErrorAction SilentlyContinue|Sort-Object LastWriteTimeUtc -Descending|Select-Object -First 2)
  foreach($traceFile in $traceFiles){

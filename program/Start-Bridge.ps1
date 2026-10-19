@@ -19,7 +19,7 @@ function Get-DefaultInbox { param([string]$Role) if($Role -eq 'External'){'C:\FT
 
 # ---- External role: one worker process per request; UI reflects its JSON status ----
 function New-ExternalBridgeState {
- return @{localAiJob=$null;localAiStatus=$null;role='External';inbox='';stateDir='';config='';seen=@{};active=$null;status='외부 수집 대기 중입니다. 내부 PC에서 요청이 오면 자동으로 처리합니다.';phase='idle';lastResult='';lastAt=$null;transferReady=$false;configured=$true;monitorStatus='waiting';operationTrace=$null;release='bridge-v18.2';inputLocked=$false;operationPhase='';collectionStatus='not-started';collectedCount=0;failedCount=0;collectionError='';sendStage='';sendError='';browserStartupPending=$false;browserStatus='waiting';browserCode='';browserStartupProcess=$null;browserStartedAt=[DateTime]::MinValue}
+ return @{localAiJob=$null;localAiStatus=$null;role='External';inbox='';stateDir='';config='';seen=@{};active=$null;status='외부 수집 대기 중입니다. 내부 PC에서 요청이 오면 자동으로 처리합니다.';phase='idle';lastResult='';lastAt=$null;transferReady=$false;configured=$true;monitorStatus='waiting';operationTrace=$null;release='bridge-v18.2-r1';inputLocked=$false;operationPhase='';collectionStatus='not-started';collectedCount=0;failedCount=0;collectionError='';sendStage='';sendError='';browserStartupPending=$false;browserStatus='waiting';browserCode='';browserStartupProcess=$null;browserStartedAt=[DateTime]::MinValue}
 }
 function Start-ExternalWebmailWindow {
  param($State)
@@ -195,6 +195,7 @@ function Stop-BridgeOperation {
    foreach($a in @($state.attachments.Values)){if($a.status-in@('requesting','receiving')){$a.status='failed';$a.error='USER_ABORTED'}}
    if($state.attachmentDataDirectory){Save-InternalAttachments $state $state.attachmentDataDirectory}
    Close-InternalChatPending $state 'CHAT_CANCELLED'
+   if($state.keyRequestId-and$state.attachmentDataDirectory){Add-BridgeExchangeCleanup $state.attachmentDataDirectory $state.inbox 'Internal' ([string]$state.keyRequestId) (Join-Path $state.inbox ('MailTransfer-Result-'+$state.keyRequestId+'.txt'))}
    $state.sendQueue.Clear();$state.busy=$false;$state.connecting=$false;$state.pendingId=$null;$state.keyRequestId=$null
    $state.status='이 PC의 응답 대기를 취소했습니다. 외부 PC 작업의 중지는 외부 PC에서 F4를 누르세요.'
   }
@@ -204,7 +205,7 @@ function Get-BridgePublicState {
  param($App)
  if($App.role -eq 'Internal'){$s=Get-InternalPublicState $App.internal;$s.role='Internal';$s.calendar=Get-BridgeCalendar $App.stateDir;return (Get-BridgeSetupPublicState $App $s)}
  if($App.role -eq 'External'){$s=Get-ExternalPublicState $App.external;$s.aiSettings=Get-MailAiPublicConfig $App.stateDir;return (Get-BridgeSetupPublicState $App $s)}
- return @{role=$null;application='mail-transfer-bridge';operationTrace=$null;release='bridge-v18.2';status='이 PC의 역할을 선택하세요.';mails=@()}
+ return @{role=$null;application='mail-transfer-bridge';operationTrace=$null;release='bridge-v18.2-r1';status='이 PC의 역할을 선택하세요.';mails=@()}
 }
 
 # ---- HTTP (loopback only), reusing Write-BridgeHttpReply from Start-Internal ----
