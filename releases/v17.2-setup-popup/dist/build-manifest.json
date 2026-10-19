@@ -1,6 +1,6 @@
 {
   "base": "user supplied v17.2 HTML",
-  "revision": "v17.2-위치설정수정1",
+  "revision": "v17.2-시작프로그램수정2",
   "changed_program_files": [
     "app.html"
   ],
