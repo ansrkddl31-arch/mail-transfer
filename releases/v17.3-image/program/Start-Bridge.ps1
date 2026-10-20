@@ -172,6 +172,7 @@ function Stop-BridgeOperation {
   $App.external.status='중지를 요청했습니다. 입력 제한을 해제합니다.'
  }elseif($App.role-eq'Internal'){
   $state=$App.internal
+  $state.collectAfterConnect=$false
   if($null-ne$state.activeSend){
    Initialize-MailInputGuard
    $job=$state.activeSend.job
@@ -323,6 +324,10 @@ try{
    elseif(([DateTime]::UtcNow-$entry.accepted).TotalSeconds -gt 3){$client.Dispose();[void]$clients.Remove($entry)}
   }
   Update-BridgeSetup $app
+  if(-not$app.maintenanceTick-or([DateTime]::UtcNow-$app.maintenanceTick).TotalSeconds-ge1){
+   $app.maintenanceTick=[DateTime]::UtcNow
+   try{Invoke-BridgeArtifactMaintenance $app}catch{}
+  }
   if($app.setupActive){Start-Sleep -Milliseconds 50;continue}
   if($null -ne $app.internal){Update-InternalBridgeSends $app.internal}
   if(([DateTime]::UtcNow-$lastPoll).TotalSeconds -ge 1){

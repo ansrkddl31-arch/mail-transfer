@@ -72,15 +72,7 @@ try{
   Send-AttachmentBridgeOnce $attachmentPath $Configuration
  }
  if($result.kind-eq'attachment-result'){Send-AttachmentBridgeOnce $resultPath $Configuration}else{Send-BridgePacket $resultPath $Configuration -Role External}
- if($result.kind-eq'attachment-result'-and$result.status-eq'success'){
-  try{
-   $native=Get-Item -LiteralPath $attachmentPath
-   if(-not($native.Attributes-band[IO.FileAttributes]::ReparsePoint)-and(Get-TransferBytesHash ([IO.File]::ReadAllBytes($attachmentPath)))-ceq$result.file.hash){
-    [IO.File]::Delete($attachmentPath)
-    foreach($suffix in @('.send.json','.send.progress.json')){$sidecar=[IO.Path]::ChangeExtension($attachmentPath,$suffix);if(Test-Path -LiteralPath $sidecar){$info=Get-Item -LiteralPath $sidecar;if(-not($info.Attributes-band[IO.FileAttributes]::ReparsePoint)){[IO.File]::Delete($sidecar)}}}
-   }
-  }catch{}
- }
+ # Attachment payloads remain in the external outbox after transfer.
  Set-OperationStep 'FINISH' 20
  $script:workerSendStatus='submitted'
  Add-BridgeExchangeCleanup $StateDirectory $Inbox 'External' $id $RequestPath

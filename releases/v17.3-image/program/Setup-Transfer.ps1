@@ -11,7 +11,7 @@ try{
   if($outcome.clicked){throw 'TRANSFER_SUBMITTED_UNCONFIRMED'}
   throw ([string]$outcome.error)
  }
- Write-BridgeJson $StatusFile @{ok=$true;status='이미지 인식 시험 전송을 마쳤습니다. 반대쪽 수신 폴더에서 시험 TXT 도착을 확인하세요.';probeId=$RequestId}
+ Write-BridgeJson $StatusFile @{ok=$true;status='이미지 인식 시험 전송을 마쳤습니다. 시험 파일은 약 1분 후 자동 정리됩니다. 반대쪽 진단에서 수신 기록을 확인할 수 있습니다.';probeId=$RequestId}
 }catch{
  $code=$_.Exception.Message;if($code-cnotmatch'^[A-Z][A-Z0-9_]+$'){$code='IMAGE_TRANSFER_FAILED'}
  Write-BridgeJson $StatusFile @{ok=$false;error=$code;status=(Get-BridgeSendFailureMessage $code)}

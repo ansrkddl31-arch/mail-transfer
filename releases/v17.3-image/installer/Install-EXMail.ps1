@@ -142,7 +142,7 @@ try{
  try{$owned=$mutex.WaitOne(0)}catch [Threading.AbandonedMutexException]{$owned=$true}
  if(-not$owned){throw '다른 설치·복구 작업이 실행 중입니다.'}
  $mode=if($env:EXMAIL_INSTALL_MODE-in@('Startup','Launch')){$env:EXMAIL_INSTALL_MODE}else{'Install'}
- Write-Host 'EX메일 익스플로러 v17.3 이미지 자동 전송3 · 내부·외부 PC에 각각 설치하세요.'
+ Write-Host 'EX메일 익스플로러 v17.3 이미지 자동 전송4 · 내부·외부 PC에 각각 설치하세요.'
  Invoke-EXMailInstall $env:EXMAIL_INSTALLER_FILE 'C:\EX메일 익스플로러' ([Environment]::GetFolderPath('DesktopDirectory')) ([Environment]::GetFolderPath('Startup')) $mode
  Write-Host '완료: 설치·복구 확인 후 EX메일 화면을 열었습니다.' -ForegroundColor Green
  Write-Host '시작프로그램: EXMail-Recover.bat / 자동 실행 해제: Win+R → shell:startup → 해당 BAT 삭제'

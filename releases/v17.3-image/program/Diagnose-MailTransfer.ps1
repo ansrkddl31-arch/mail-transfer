@@ -47,6 +47,15 @@ function Get-MailTransferDiagnostics {
  }catch{}
  $role=if($null-ne$state){[string]$state.role}else{'External'}
  $roleFolder=Join-Path $BridgeStateRoot $role
+ try{
+  $probeReceipt=Get-Item -LiteralPath (Join-Path $roleFolder 'last-probe-receipt.json') -ErrorAction Stop
+  if(-not($probeReceipt.Attributes-band[IO.FileAttributes]::ReparsePoint)-and$probeReceipt.Length-le4096){
+   $receipt=[IO.File]::ReadAllText($probeReceipt.FullName)|ConvertFrom-Json
+   if($receipt.schemaVersion-eq1-and$receipt.received-eq$true-and[string]$receipt.id-cmatch'^[a-f0-9]{32}$'-and[string]$receipt.hash-cmatch'^[A-Fa-f0-9]{64}$'){
+    $lines.Add('probe.receivedId='+$receipt.id);$lines.Add('probe.receivedHash='+$receipt.hash)
+   }
+  }
+ }catch{}
  # Trace files are written before blocking calls, independently of terminal status.
  $traceFiles=@(Get-ChildItem -LiteralPath $roleFolder -Filter 'worker-*.trace.json' -File -ErrorAction SilentlyContinue|Sort-Object LastWriteTimeUtc -Descending|Select-Object -First 2)
  foreach($traceFile in $traceFiles){

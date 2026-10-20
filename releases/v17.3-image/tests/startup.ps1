@@ -2,7 +2,7 @@ $ErrorActionPreference='Stop'
 $repo=Split-Path -Parent $PSScriptRoot
 function Assert($Condition,[string]$Message){if(-not$Condition){throw $Message}}
 $root=Join-Path ([IO.Path]::GetTempPath()) ('exmail17-startup-'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($root)
-$batch=Join-Path $repo 'dist/EX메일-익스플로러-자동설치-v17.3-이미지자동전송3.bat'
+$batch=Join-Path $repo 'dist/EX메일-익스플로러-자동설치-v17.3-이미지자동전송4.bat'
 $raw=[IO.File]::ReadAllText($batch);$encoded=[regex]::Match($raw,'(?m)^::EXMAIL_SCRIPT:([A-Za-z0-9+/=]+)').Groups[1].Value
 # The bootstrap must allow its unblocked local launcher script in this process.
 # Without this flag a default Restricted policy accepts inline code but rejects dot-sourcing Launch-EXMail.ps1.
@@ -17,7 +17,7 @@ try{
  $dest=Join-Path $root 'program';$desktop=Join-Path $root 'desktop';$startup=Join-Path $root 'Startup'
  [void][IO.Directory]::CreateDirectory($startup);[IO.File]::WriteAllText((Join-Path $startup 'EX메일 익스플로러.lnk'),'old')
  Invoke-EXMailInstall $batch $dest $desktop $startup 'Install' $open
- Assert ((Get-ChildItem $dest -File).Count-eq35) 'INSTALL_FILE_COUNT'
+ Assert ((Get-ChildItem $dest -File).Count-eq36) 'INSTALL_FILE_COUNT'
  $saved=Join-Path $startup 'EXMail-Recover.bat'
  Assert ((Get-EXMailDigest ([IO.File]::ReadAllBytes($saved)))-ceq(Get-EXMailDigest ([IO.File]::ReadAllBytes($batch)))) 'INCOMPLETE_STARTUP_BATCH'
  Assert ((Get-ChildItem $startup -File).Count-eq1) 'DUPLICATE_STARTUP_ENTRY'

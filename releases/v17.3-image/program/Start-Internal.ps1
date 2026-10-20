@@ -6,7 +6,7 @@ $bridgeLibraryMode=$LibraryOnly
 . (Join-Path $PSScriptRoot 'Collector.ps1') -LibraryOnly
 $LibraryOnly=$bridgeLibraryMode
 function New-InternalBridgeState {
- return @{connectionResetPending=$false;connectionResetAt=[DateTime]::MinValue;connectionResetId='';connectionResetReconnect=$false;collectionFilter=(Get-DefaultMailCollectionFilter);activeFilter=(Get-DefaultMailCollectionFilter);aiPreferences=(Get-DefaultMailAiPreferences);publicXml=$null;keyRequestId=$null;lastKeyAt=[DateTime]::MinValue;pendingId=$null;pendingAt=[DateTime]::MinValue;status='외부 연결을 눌러 연결 테스트를 시작하세요.';busy=$false;loginNeeded=$false;loginError='';sessionReady=$false;mails=@();failedMails=@();seen=@{};inbox='';configurationFile='';configured=$true;transferReady=$true;updatedAt=$null;connecting=$false;connectionAttempted=$false;monitorStatus='waiting';release='internal-v17.3';activeCount=100;attachments=@{};attachmentDataDirectory='';transferConfiguration='';sendQueue=(New-Object 'System.Collections.Generic.Queue[object]');activeSend=$null;sending=$false;lastCount=100}
+ return @{collectAfterConnect=$false;connectionResetPending=$false;connectionResetAt=[DateTime]::MinValue;connectionResetId='';connectionResetReconnect=$false;collectionFilter=(Get-DefaultMailCollectionFilter);activeFilter=(Get-DefaultMailCollectionFilter);aiPreferences=(Get-DefaultMailAiPreferences);publicXml=$null;keyRequestId=$null;lastKeyAt=[DateTime]::MinValue;pendingId=$null;pendingAt=[DateTime]::MinValue;status='로그인하고 불러오기를 누르면 연결 준비부터 메일 수집까지 진행합니다.';busy=$false;loginNeeded=$false;loginError='';sessionReady=$false;mails=@();failedMails=@();seen=@{};inbox='';configurationFile='';configured=$true;transferReady=$true;updatedAt=$null;connecting=$false;connectionAttempted=$false;monitorStatus='waiting';release='internal-v17.3';activeCount=100;attachments=@{};attachmentDataDirectory='';transferConfiguration='';sendQueue=(New-Object 'System.Collections.Generic.Queue[object]');activeSend=$null;sending=$false;lastCount=100}
 }
 function Add-InternalBridgeSend {
  # Queue a written request file for the screen sender; never drive the mouse from the HTTP thread.
@@ -30,7 +30,7 @@ function Update-InternalBridgeSends {
   # A send failed. Roll back the waiting state so the user can retry, and never resend automatically.
   $code=[string]$outcome.error;if([string]::IsNullOrWhiteSpace($code)){$code='TRANSFER_FAILED'}
   if($outcome.clicked-and$code-ne'USER_ABORTED'){$code='TRANSFER_SUBMITTED_UNCONFIRMED'}
-  if($job.action -eq 'connect'){$State.connecting=$false;$State.keyRequestId=$null}
+  if($job.action -eq 'connect'){$State.connecting=$false;$State.keyRequestId=$null;$State.collectAfterConnect=$false}
   else{$State.busy=$false;$State.pendingId=$null}
   if($job.action-eq'attachment'){foreach($a in @($State.attachments.Values)){if($a.requestId-ceq$job.requestId){$a.status='failed';$a.error=$code}};Save-InternalAttachments $State $State.attachmentDataDirectory}
   $State.status=Get-BridgeSendFailureMessage $code
@@ -49,6 +49,13 @@ function Submit-InternalBridgeRequest {
  if(-not $State.transferReady){throw 'BACKGROUND_TRANSFER_NOT_CONFIGURED'}
  if($Count -lt 1){$Count=1}elseif($Count -gt 1000){$Count=1000}
  $State.lastCount=$Count;$State.activeCount=$Count
+ # The first collection request continues after a validated key reply; no credentials are retained.
+ if($Action -eq 'refresh' -and [string]::IsNullOrEmpty($State.publicXml)){
+  Submit-InternalBridgeRequest $State 'connect' '' '' $DataDirectory $Settings $Count
+  $State.collectAfterConnect=$true
+  $State.status='처음 연결을 준비하고 있습니다. 완료되면 로그인 상태를 확인하고 메일을 가져옵니다.'
+  return
+ }
  $id=[Guid]::NewGuid().ToString('N')
  $packet=@{schemaVersion=4;kind='mail-request';requestId=$id;createdAt=[DateTime]::UtcNow.ToString('o');count=$Count}
  if($Action-ne'connect'){$packet.ai=ConvertTo-MailAiPreferences $State.aiPreferences;$packet.collection=ConvertTo-MailCollectionFilter $State.collectionFilter;$State.activeFilter=$packet.collection}
@@ -76,14 +83,16 @@ function Update-InternalBridgeInbox {
   $packet=$entry.Packet;$id=[string]$packet.requestId
   if($State.seen.ContainsKey($entry.File.FullName)){continue}
   if($packet.kind -eq 'public-key' -and $id -ceq $State.keyRequestId){
+   $keyAccepted=$false
    try{
     if($packet.publicXml -match '<(?:D|P|Q|DP|DQ|InverseQ)>'){throw 'PUBLIC_KEY_REQUIRED'}
     $rsa=New-BridgeKey
     try{$rsa.FromXmlString([string]$packet.publicXml);if($rsa.KeySize -lt 2048){throw 'PUBLIC_KEY_TOO_SMALL'}}finally{$rsa.Dispose()}
-    $State.publicXml=[string]$packet.publicXml;Add-BridgeExchangeCleanup $DataDirectory $Folder 'Internal' $id $entry.File.FullName;$State.status='외부 연결 준비가 됐습니다. 메일 가져오기를 누르세요.'
-   }catch{$State.status='외부 연결 키를 확인하지 못했습니다. 연결 확인을 다시 누르세요.'}
+    $keyAccepted=$true;$State.publicXml=[string]$packet.publicXml;Add-BridgeExchangeCleanup $DataDirectory $Folder 'Internal' $id $entry.File.FullName;$State.status='외부 연결 준비가 됐습니다.'
+   }catch{$State.status='외부 연결 키를 확인하지 못했습니다. 로그인하고 불러오기를 다시 누르세요.'}
    $State.connecting=$false;$State.keyRequestId=$null
    $State.seen[$entry.File.FullName]=$true
+   if(-not$keyAccepted){$State.collectAfterConnect=$false}
   }
   elseif($packet.kind-eq'attachment-result'-and$id-ceq$State.pendingId){
    $jobs=@($State.attachments.Values|Where-Object{$_.requestId-ceq$id-and$_.attachmentId-ceq$packet.attachmentId})
@@ -114,8 +123,14 @@ function Update-InternalBridgeInbox {
    $State.busy=$false;$State.seen[$entry.File.FullName]=$true
   }
  }
+ # The reply may arrive before the sender finishes observing its own completion.
+ if($State.collectAfterConnect -and $State.publicXml -and -not$State.sending -and -not$State.connecting -and -not$State.busy){
+  $State.collectAfterConnect=$false
+  try{Submit-InternalBridgeRequest $State 'refresh' '' '' $DataDirectory '' $State.activeCount}
+  catch{$State.status='연결은 준비됐지만 메일 요청을 시작하지 못했습니다. 로그인하고 불러오기를 다시 누르세요.'}
+ }
  Update-InternalAttachments $State $Folder $DataDirectory
- if($State.connecting -and ([DateTime]::UtcNow-$State.lastKeyAt).TotalSeconds -ge 60){$State.connecting=$false;$State.keyRequestId=$null;$State.status='외부 PC의 연결 응답이 60초 안에 도착하지 않았습니다. 자료교환 전송과 양쪽 실행 상태를 확인하세요.'}
+ if($State.connecting -and ([DateTime]::UtcNow-$State.lastKeyAt).TotalSeconds -ge 60){$State.connecting=$false;$State.keyRequestId=$null;$State.collectAfterConnect=$false;$State.status='외부 PC의 연결 응답이 60초 안에 도착하지 않았습니다. 자료교환 전송과 양쪽 실행 상태를 확인하세요.'}
  if($State.busy -and ([DateTime]::UtcNow-$State.pendingAt).TotalMinutes -gt $(if($State.activeCount -gt 20){12}else{6})){$State.busy=$false;$State.status='응답 대기 시간이 초과되었습니다. 자료교환 수신과 외부 PC 실행 상태를 확인하세요.'}
 }
 function Get-InternalPublicState {
@@ -133,7 +148,7 @@ function Start-InternalConnectionReset {
  if($state.connectionResetPending){throw 'CONNECTION_RESET_IN_PROGRESS'}
  $state.connectionResetPending=$true;$state.connectionResetId=$OperationId;$state.connectionResetAt=[DateTime]::UtcNow;$state.connectionResetReconnect=$Reconnect
  # Invalidate replies immediately, so a response arriving while the sender stops is ignored.
- $state.pendingId=$null;$state.keyRequestId=$null;$state.publicXml=$null;$state.loginNeeded=$false;$state.loginError='';$state.sessionReady=$false
+ $state.collectAfterConnect=$false;$state.pendingId=$null;$state.keyRequestId=$null;$state.publicXml=$null;$state.loginNeeded=$false;$state.loginError='';$state.sessionReady=$false
  $state.sendQueue.Clear();$state.connectionAttempted=$true
  $state.status='연결 초기화 중입니다. 이 PC의 전송을 중지하고 있습니다.'
  if($null-ne$state.activeSend){
@@ -157,7 +172,7 @@ function Update-InternalConnectionReset {
  $State.busy=$false;$State.sending=$false;$State.connecting=$false;$State.pendingAt=[DateTime]::MinValue;$State.lastKeyAt=[DateTime]::MinValue
  $reconnect=$State.connectionResetReconnect;$State.connectionResetReconnect=$false;$State.connectionResetPending=$false
  $State.status='연결을 초기화했습니다. 저장된 메일·일정·설정은 유지했습니다.'
- if($uncertain){$State.status+=' 이전 전송 여부를 확인한 뒤 외부 연결을 다시 누르세요. 자동 재전송하지 않습니다.';return}
+ if($uncertain){$State.status+=' 이전 전송 여부를 확인한 뒤 로그인하고 불러오기를 다시 누르세요. 자동 재전송하지 않습니다.';return}
  if($reconnect){
   if(-not$State.configured-or-not$State.transferReady){$State.status+=' 수신 폴더와 보내기 초기 설정을 확인한 뒤 외부 연결을 누르세요.';return}
   try{Submit-InternalBridgeRequest $State 'connect' '' '' $State.attachmentDataDirectory '' $State.lastCount}catch{$State.status='초기화했지만 연결 테스트를 시작하지 못했습니다. 설정을 확인한 뒤 다시 연결하세요.'}
@@ -198,7 +213,7 @@ function Save-InternalBridgeSettings {
  $pathChanged=-not[string]::Equals([string]$State.inbox,$full,[StringComparison]::OrdinalIgnoreCase)
  try{Write-BridgeJson $State.configurationFile @{role='Internal';inbox=$full;port=$ListenPort;count=$Count;folderConfirmed=$true}}catch{throw 'SETTINGS_SAVE_FAILED'}
  $State.inbox=$full;$State.configured=$true;$State.lastCount=$Count
- if($pathChanged){$State.publicXml=$null;$State.keyRequestId=$null;$State.connecting=$false;$State.connectionAttempted=$false}
+ if($pathChanged){$State.collectAfterConnect=$false;$State.publicXml=$null;$State.keyRequestId=$null;$State.connecting=$false;$State.connectionAttempted=$false}
  $State.monitorStatus='watching'
  if(-not $State.transferReady){$State.status='수신 폴더를 저장했습니다. 자료교환 연결 준비가 필요합니다.'}
  else{$State.status=('설정을 저장했습니다. 다시 불러오기는 {0}건을 요청합니다.' -f $Count)}

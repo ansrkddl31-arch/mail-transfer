@@ -176,8 +176,7 @@ function Update-InternalAttachments {
       if((Get-TransferBytesHash ([IO.File]::ReadAllBytes($dest)))-cne$job.file.hash){throw 'ATTACHMENT_HASH_MISMATCH'}
       $job.path=$dest;$job.status='ready';$job.error='';$State.status='첨부파일을 받았습니다. 첨부 목록에서 저장할 수 있습니다.'
       $State.busy=$false;$State.pendingId=$null;Save-InternalAttachments $State $DataDirectory
-      # Only the verified application-owned transport copy is removed; saved file stays.
-      try{[IO.File]::Delete($path)}catch{}
+      # Keep received attachment transport and saved original-name copies.
      }
     }
    }catch{$job.status='failed';$job.error=if($_.Exception.Message-cmatch'^[A-Z][A-Z0-9_]+$'){$_.Exception.Message}else{'ATTACHMENT_RECEIVE_FAILED'};$State.busy=$false;$State.status=Get-AttachmentErrorText $job.error;Save-InternalAttachments $State $DataDirectory}

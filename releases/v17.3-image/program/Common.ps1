@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Transfer.Startup.ps1')
 . (Join-Path $PSScriptRoot 'Image.Flow.ps1')
 . (Join-Path $PSScriptRoot 'Transfer.Image.ps1')
+. (Join-Path $PSScriptRoot 'Maintenance.ps1')
 function Write-BridgeJson {
     param([string]$Path, $Value)
     $folder = Split-Path -Parent $Path

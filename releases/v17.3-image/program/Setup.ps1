@@ -30,6 +30,7 @@ function Update-BridgeSetup {
  if($App.setupJob){
   if(-not$App.setupJob.process.HasExited){return}
   try{$App.setupResult=Read-BridgeJson $App.setupJob.statusFile -MaximumBytes 16384}catch{$App.setupResult=@{ok=$false;status='설정이 중단되었습니다. 다시 시작할 수 있습니다.';error='SETUP_INTERRUPTED'}}
+  if($App.setupResult.ok){try{[IO.File]::Delete($App.setupJob.statusFile)}catch{}}
   if($App.role-eq'Internal'){$App.internal.transferReady=Test-BridgeTransferReady $App.internal.transferConfiguration}
   elseif($App.role-eq'External'){$App.external.transferReady=Test-BridgeTransferReady $App.external.config}
   $App.setupJob=$null;$App.setupTouched=[DateTime]::UtcNow
