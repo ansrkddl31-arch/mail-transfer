@@ -36,3 +36,27 @@ function Test-ImageRegisteredName {
  if($FileName-cnotmatch'^MailTransfer-(?:(?:Probe|Request|Result)-[a-f0-9]{32}\.txt|Attachment-[a-f0-9]{32}(?:\.[^\\/:*?"<>|\x00-\x1f]{1,20})?)$'){return $false}
  return $value-ceq$FileName-or$value-ceq[IO.Path]::GetFileNameWithoutExtension($FileName)-or$value-ceq$FullPath
 }
+function Wait-ImageActionFrame {
+ param([string]$Kind,[scriptblock]$ReadSnapshot,[scriptblock]$NameMatches,[scriptblock]$CheckContinue,[scriptblock]$Observe,[scriptblock]$Pause={Start-Sleep -Milliseconds 200},[int]$MaxObservations=6)
+ $previous=$null;$failure='CLICK_TARGET_NOT_UNIQUE'
+ for($attempt=1;$attempt-le$MaxObservations;$attempt++){
+  & $CheckContinue
+  $frame=& $ReadSnapshot
+  $items=@(switch($Kind){'PLUS'{$frame.plus};'SEND'{$frame.send};'CANCEL'{$frame.cancel};default{throw 'CLICK_KIND_INVALID'}})
+  $valid=$items.Count-eq1
+  if(-not$valid){$failure='CLICK_TARGET_NOT_UNIQUE'}
+  elseif(($Kind-eq'PLUS'-and@($frame.send).Count-ne0)-or($Kind-ne'PLUS'-and(@($frame.plus).Count-ne0-or@($frame.send).Count-ne1))){$valid=$false;$failure='CLICK_SCREEN_STATE_CHANGED'}
+  elseif($Kind-eq'SEND'-and$frame.emptyEditor){$valid=$false;$failure='SEND_LIST_STILL_ZERO_FILES'}
+  elseif($Kind-eq'SEND'-and-not(& $NameMatches)){$valid=$false;$failure='TEST_FILENAME_NOT_VERIFIED'}
+  if($valid){
+   $target=$items[0];$stable=$null-ne$previous
+   if($stable){foreach($key in @('X','Y','Width','Height')){if([Math]::Abs($target.$key-$previous.target.$key)-gt3){$stable=$false}};foreach($key in @('originX','originY')){if([Math]::Abs($frame.$key-$previous.$key)-gt3){$stable=$false}}}
+   $frame.target=$target
+   if($stable){& $Observe $attempt 'READY';return $frame}
+   $failure='CLICK_TARGET_NOT_STABLE';$previous=$frame
+  }else{$previous=$null}
+  & $Observe $attempt $failure
+  if($attempt-lt$MaxObservations){& $Pause}
+ }
+ throw $failure
+}

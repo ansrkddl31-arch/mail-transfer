@@ -27,6 +27,24 @@ function Get-MailTransferDiagnostics {
   }catch{$lines.Add('Running folder check unavailable: '+$_.Exception.GetType().Name)}
  }
  if($runtimeFolder -and -not[string]::Equals($runtimeFolder,$ProgramFolder,[StringComparison]::OrdinalIgnoreCase)){$lines.Add('NOTICE: diagnostic/update folder differs from running bridge folder.')}
+ # Include only bounded image-error metadata. Do not include screenshots, filenames, IPs or arbitrary fields.
+ $imageFolder=if($runtimeFolder){$runtimeFolder}else{$ProgramFolder}
+ $imageError=Join-Path (Join-Path $imageFolder 'logs') 'ImageTransfer-last-error.json'
+ try{
+  $info=Get-Item -LiteralPath $imageError -ErrorAction Stop
+  if(-not($info.Attributes-band[IO.FileAttributes]::ReparsePoint)-and$info.Length-le65536){
+   $data=[IO.File]::ReadAllText($imageError)|ConvertFrom-Json
+   foreach($key in @('stage','error')){if([string]$data.$key-cmatch'^[A-Z][A-Z0-9_]{0,100}$'){$lines.Add('image.'+$key+'='+$data.$key)}}
+   if($data.clicked-is[bool]){$lines.Add('image.clicked='+$data.clicked)}
+   foreach($key in @('plusCount','sendCount','cancelCount','capture')){$v=$data.snapshot.$key;if(($v-is[int]-or$v-is[long])-and$v-ge0-and$v-le100000){$lines.Add('image.'+$key+'='+$v)}}
+   foreach($key in @('registered','emptyEditor')){if($data.snapshot.$key-is[bool]){$lines.Add('image.'+$key+'='+$data.snapshot.$key)}}
+   foreach($candidate in @($data.snapshot.candidates|Select-Object -First 8)){
+    if($candidate.Kind-notin@('PLUS','SEND','CANCEL')){continue};$safe=@{kind=$candidate.Kind}
+    foreach($key in @('X','Y','Width','Height')){$v=$candidate.$key;if(($v-is[int]-or$v-is[long])-and$v-ge-10000-and$v-le10000){$safe[$key]=$v}}
+    $lines.Add('image.candidate='+($safe|ConvertTo-Json -Compress))
+   }
+  }
+ }catch{}
  $role=if($null-ne$state){[string]$state.role}else{'External'}
  $roleFolder=Join-Path $BridgeStateRoot $role
  # Trace files are written before blocking calls, independently of terminal status.

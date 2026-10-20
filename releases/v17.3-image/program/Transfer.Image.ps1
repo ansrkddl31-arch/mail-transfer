@@ -33,7 +33,7 @@ function Save-TransferReport {
 }
 function Send-ImageTransferFile {
  param([string]$Path,[string]$Configuration,[int]$MaxBytes=67108864,[string]$ErrorLogDirectory='')
- $script:trialStage='INITIALIZE';$script:sendAttempted=$false;$script:sendClicks=0;$script:captures=0;$script:lastSnapshot=$null;$script:lastImageBytes=$null
+ $script:trialStage='INITIALIZE';$script:sendAttempted=$false;$script:sendClicks=0;$script:captures=0;$script:lastSnapshot=$null;$script:lastImageBytes=$null;$script:snapshotRestores=0
  $script:report=New-Object 'System.Collections.Generic.List[string]';$report=$script:report
  $script:trialName='';$script:trialPath='';$hash='';$mutex=$null;$owned=$false
  function Save-TrialResult([string]$Outcome,[string]$ErrorText=''){
@@ -49,6 +49,13 @@ function Send-ImageTransferFile {
   if([EXMailImageTrial.Native]::IsIconic($script:trialWindow)){throw 'TRANSFER_WINDOW_MINIMIZED'}
  }
  function Get-TrialSnapshot {
+  Assert-TransferAbort
+  if([EXMailImageTrial.Native]::GetForegroundWindow()-ne$script:trialWindow){
+   if($script:snapshotRestores-ge2){throw 'TRANSFER_WINDOW_NOT_FOREGROUND'}
+   Focus-TransferWindow ([pscustomobject]@{Current=[pscustomobject]@{NativeWindowHandle=$script:trialWindow}})
+   $script:snapshotRestores++
+   $report.Add('Known transfer window restored before capture')
+  }
   Assert-TrialWindow
   $rect=New-Object EXMailImageTrial.Native+Rect;$point=New-Object EXMailImageTrial.Native+Point
   if(-not[EXMailImageTrial.Native]::GetClientRect($script:trialWindow,[ref]$rect)-or-not[EXMailImageTrial.Native]::ClientToScreen($script:trialWindow,[ref]$point)){throw 'WINDOW_RECT_FAILED'}
@@ -132,13 +139,9 @@ function Send-ImageTransferFile {
   return $false
  }
  function Invoke-TrialClick([string]$Kind,$Expected){
-  $fresh=Get-TrialSnapshot;$items=switch($Kind){'PLUS'{@($fresh.plus)};'SEND'{@($fresh.send)};'CANCEL'{@($fresh.cancel)};default{throw 'CLICK_KIND_INVALID'}}
-  $items=@($items)
-  if($items.Count-ne1){throw 'CLICK_TARGET_NOT_UNIQUE'}
-  if(($Kind-eq'PLUS'-and@($fresh.send).Count-ne0)-or($Kind-eq'SEND'-and@($fresh.plus).Count-ne0)){throw 'CLICK_SCREEN_STATE_CHANGED'}
-  if($Kind-eq'CANCEL'-and($script:sendAttempted-or@($fresh.plus).Count-ne0-or@($fresh.send).Count-ne1)){throw 'CANCEL_SCREEN_STATE_CHANGED'}
-  $target=$items[0]
-  if([Math]::Abs($target.X-$Expected.X)-gt3-or[Math]::Abs($target.Y-$Expected.Y)-gt3-or[Math]::Abs($target.Width-$Expected.Width)-gt3-or[Math]::Abs($target.Height-$Expected.Height)-gt3){throw 'CLICK_TARGET_MOVED'}
+  if($script:sendAttempted){throw 'SEND_ALREADY_ATTEMPTED'}
+  $fresh=Wait-ImageActionFrame -Kind $Kind -ReadSnapshot {Get-TrialSnapshot} -NameMatches {Test-TrialFileRegistered} -CheckContinue {Assert-TransferAbort} -Observe {param($attempt,$reason) $report.Add(('Preflight '+$Kind+' #'+$attempt+': '+$reason))}
+  $target=$fresh.target
   if($Kind-eq'SEND'){
    if($script:sendAttempted){throw 'SEND_ALREADY_ATTEMPTED'}
    if($fresh.emptyEditor){throw 'SEND_LIST_STILL_ZERO_FILES'}
@@ -178,7 +181,7 @@ function Send-ImageTransferFile {
  }
  function Wait-TrialReady {
   $deadline=[DateTime]::UtcNow.AddSeconds(15)
-  do{$frame=Get-TrialSnapshot;$frame.registered=Test-TrialFileRegistered;if($frame.registered-and-not$frame.emptyEditor-and@($frame.send).Count-eq1){return $frame};Start-Sleep -Milliseconds 300}while([DateTime]::UtcNow-lt$deadline)
+  do{$frame=Get-TrialSnapshot;$frame.registered=Test-TrialFileRegistered;$script:lastSnapshot.registered=$frame.registered;if($frame.registered-and-not$frame.emptyEditor-and@($frame.send).Count-eq1){return $frame};Start-Sleep -Milliseconds 300}while([DateTime]::UtcNow-lt$deadline)
   throw 'TEST_FILE_REGISTRATION_NOT_CONFIRMED'
  }
  function Wait-TrialEmpty {

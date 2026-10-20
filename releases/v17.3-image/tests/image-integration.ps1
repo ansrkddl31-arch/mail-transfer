@@ -66,4 +66,10 @@ try{
  Assert (-not$send.Contains('Test-Send.ps1')-and-not$setup.Contains('Invoke-TransferCalibration')) 'LEGACY_CALIBRATION_ACTIVE'
  Assert (-not([IO.File]::ReadAllText((Join-Path $program 'Transfer.Image.ps1'))-match'System.Windows.Automation|AutomationElement')) 'UIA_IN_NEW_SENDER'
  'PASS operational send and optional setup test both use image path; no UIA in new sender'
+ $diagnosticRoot=Join-Path $root 'diagnostic';[void][IO.Directory]::CreateDirectory((Join-Path $diagnosticRoot 'logs'))
+ Write-BridgeJson (Join-Path (Join-Path $diagnosticRoot 'logs') 'ImageTransfer-last-error.json') @{stage='CLICK_SEND_ONCE';error='TEST_FILENAME_NOT_VERIFIED';clicked=$false;private='DO_NOT_INCLUDE';snapshot=@{plusCount=0;sendCount=1;registered=$false;candidates=@(@{Kind='SEND';X=214;Y=588;Width=114;Height=40;secret='DO_NOT_INCLUDE'})}}
+ $diagnostic=Get-MailTransferDiagnostics $diagnosticRoot 8765 $diagnosticRoot -StateSnapshot @{role='Internal'}
+ Assert ($diagnostic.Contains('image.sendCount=1')-and$diagnostic.Contains('image.registered=False')-and$diagnostic.Contains('image.error=TEST_FILENAME_NOT_VERIFIED')) 'IMAGE_FAILURE_NOT_IN_DIAGNOSTIC'
+ Assert (-not$diagnostic.Contains('DO_NOT_INCLUDE')) 'PRIVATE_IMAGE_METADATA_IN_DIAGNOSTIC'
+ 'PASS diagnostic download includes sanitized image pre-click failure evidence'
 }finally{Remove-Item $root -Recurse -Force}

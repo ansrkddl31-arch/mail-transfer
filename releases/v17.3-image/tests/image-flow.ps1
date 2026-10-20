@@ -61,3 +61,16 @@ $id='a'*32;$name='MailTransfer-Request-'+$id+'.txt';$full='C:\outbox\'+$name
 foreach($text in @($name,('MailTransfer-Request-'+$id),$full,('"'+$full+'"'))){Assert (Test-ImageRegisteredName $text $name $full) ('VALID_ID_REJECTED: '+$text)}
 foreach($text in @(('MailTransfer-Request-'+('b'*32)+'.txt'),($name+'.bad'),('MailTransfer-Request-'+$id.Substring(0,15)+'...'),'total 1 files')){Assert (-not(Test-ImageRegisteredName $text $name $full)) ('FALSE_ID_ACCEPTED: '+$text)}
 'PASS registered unique ID: basename, hidden extension and full path accepted; other IDs and truncated names rejected'
+foreach($case in @('stable','delayed','moving','neverFound','wrongName','cancelled')){
+ $script:observations=0;$script:checks=0;$script:nameOk=$case-ne'wrongName';$caught=''
+ $read={
+  $script:observations++
+  $target=@{X=$(if($case-eq'moving'-and$script:observations-eq1){50}else{100});Y=300;Width=114;Height=40}
+  $send=if($case-eq'neverFound'-or($case-eq'delayed'-and$script:observations-eq1)){@()}else{@($target)}
+  return @{plus=@();send=$send;emptyEditor=$false;originX=0;originY=0}
+ }
+ try{$frame=Wait-ImageActionFrame -Kind SEND -ReadSnapshot $read -NameMatches {$script:nameOk} -CheckContinue {$script:checks++;if($case-eq'cancelled'){throw 'USER_ABORTED'}} -Observe {} -Pause {} -MaxObservations 4}catch{$caught=$_.Exception.Message}
+ if($case-in@('stable','delayed','moving')){Assert (-not$caught-and$script:observations-ge2-and$frame.target.X-eq100) ('PREFLIGHT_FAILED: '+$case)}
+ else{Assert ([bool]$caught) ('PREFLIGHT_UNSAFE_SUCCESS: '+$case)}
+ Write-Host ('PASS pre-click stable-frame check '+$case)
+}

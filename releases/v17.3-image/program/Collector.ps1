@@ -19,6 +19,14 @@ function Get-MailLoginErrorCode {
     if ([regex]::IsMatch($text, '세션.{0,30}(?:타임아웃|만료되)|session.{0,30}(?:timeout|expired)', [Text.RegularExpressions.RegexOptions]::IgnoreCase)) { return 'WEBMAIL_SESSION_EXPIRED' }
     return $null
 }
+function Test-MailLastAccessNotice {
+    param([string]$Message,[string]$Url)
+    $origin=$null
+    if(-not[Uri]::TryCreate($Url,[UriKind]::Absolute,[ref]$origin)-or$origin.Scheme-ne'https'-or$origin.Host-ne'mail.ex.co.kr'-or$origin.Port-ne443){return $false}
+    if($origin.AbsolutePath-notmatch'^/(?:mail/mainframe/?|login/?)$'){return $false}
+    $text=[regex]::Replace([string]$Message,'\s+','')
+    return $text.Contains('최종사용정보')-and$text.Contains('최종접속시각')-and$text.Contains('최종접속아이피')-and$text.Contains('현재접속아이피')-and$text.Contains('최종접속아이피와현재아이피가다릅니다')
+}
 
 function Get-MailLoginStatusExpression {
     return @'
@@ -91,6 +99,8 @@ function Get-MailFailureMessage {
         'LOGIN_PAGE_REQUIRED' { return '외부 웹메일 로그인 화면을 확인하세요.' }
         'LOGIN_INVALID_CREDENTIALS' { return '아이디 또는 비밀번호가 틀렸습니다.' }
         'LOGIN_ACCOUNT_LOCKED' { return '웹메일 계정이 잠기거나 차단되었습니다.' }
+        'WEBMAIL_DIALOG_REQUIRES_CONFIRMATION' { return '외부 웹메일에 직접 확인할 알림이 열려 있습니다. 외부 창의 내용을 확인하고 닫은 뒤 다시 불러오세요.' }
+        'WEBMAIL_NOTICE_CONFIRM_FAILED' { return '웹메일 최종사용정보 알림을 닫지 못했습니다. 외부 창에서 확인을 누르고 다시 불러오세요.' }
         'LOGIN_PAGE_NOT_READY' { return '자동화용 Edge에서 로그인 입력 화면을 찾지 못했습니다. 외부 웹메일 창과 로그인 상태를 확인하세요.' }
         'ORIGINAL_MAIL_TEXT_NOT_FOUND' { return '이 메일의 원문을 추출하지 못했습니다.' }
         'LOGIN_FAILED' { return '웹메일 로그인이 실패했습니다.' }
@@ -175,21 +185,27 @@ function Invoke-EdgeCdp {
                 $reply = [Text.Encoding]::UTF8.GetString($stream.ToArray()) | ConvertFrom-Json
             }
             finally { $stream.Dispose() }
-            if ($reply.method -eq 'Page.javascriptDialogOpening' -and $reply.params.type -eq 'alert') {
+            if ($reply.method -eq 'Page.javascriptDialogOpening') {
+                if($reply.params.type-ne'alert'){throw 'WEBMAIL_DIALOG_REQUIRES_CONFIRMATION'}
                 $code = Get-MailLoginErrorCode ([string]$reply.params.message)
-                if (-not [string]::IsNullOrEmpty($code)) {
-                    $script:MailLoginErrorSource = 'native-alert'
+                $lastAccessNotice=Test-MailLastAccessNotice ([string]$reply.params.message) ([string]$reply.params.url)
+                if (-not [string]::IsNullOrEmpty($code)-or$lastAccessNotice) {
+                    if($code){$script:MailLoginErrorSource = 'native-alert'}
                     $dialogError = $code
                     $dialogReplyId = $session.NextId; $session.NextId++
-                    # Acknowledge only a recognized error alert. Never answer a
-                    # prompt/confirmation or complete the biometric second factor.
+                    # Acknowledge a recognized login error or the exact last-access information notice.
+                    # Other alerts, confirmations and second-factor prompts require the user.
                     $ack = @{ id = $dialogReplyId; method = 'Page.handleJavaScriptDialog'; params = @{ accept = $true } } | ConvertTo-Json -Depth 5 -Compress
                     $ackBytes = [Text.Encoding]::UTF8.GetBytes($ack)
                     $ackSegment = New-Object 'System.ArraySegment[byte]' -ArgumentList (,$ackBytes)
                     [void]$client.SendAsync($ackSegment, [Net.WebSockets.WebSocketMessageType]::Text, $true, $cancel.Token).GetAwaiter().GetResult()
-                }
+                }else{throw 'WEBMAIL_DIALOG_REQUIRES_CONFIRMATION'}
             }
-            if ($dialogReplyId -ne 0 -and $reply.id -eq $dialogReplyId) { throw $dialogError }
+            if ($dialogReplyId -ne 0 -and $reply.id -eq $dialogReplyId) {
+                if($reply.error){throw 'WEBMAIL_NOTICE_CONFIRM_FAILED'}
+                if($dialogError){throw $dialogError}
+                $dialogReplyId=0
+            }
             if ($reply.id -eq $commandId) { $commandReply = $reply }
             if ($null -ne $commandReply -and $dialogReplyId -eq 0) {
                 if ($null -ne $commandReply.error) { throw 'DEBUG_PROTOCOL_ERROR' }
