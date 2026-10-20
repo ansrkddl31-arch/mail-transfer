@@ -2,8 +2,12 @@ $ErrorActionPreference='Stop'
 $repo=Split-Path -Parent $PSScriptRoot
 function Assert($Condition,[string]$Message){if(-not$Condition){throw $Message}}
 $root=Join-Path ([IO.Path]::GetTempPath()) ('exmail17-startup-'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($root)
-$batch=Join-Path $repo 'dist/EX메일-익스플로러-자동설치-v17.2-시작프로그램수정2.bat'
+$batch=Join-Path $repo 'dist/EX메일-익스플로러-자동설치-v17.2-시작프로그램수정3.bat'
 $raw=[IO.File]::ReadAllText($batch);$encoded=[regex]::Match($raw,'(?m)^::EXMAIL_SCRIPT:([A-Za-z0-9+/=]+)').Groups[1].Value
+# The bootstrap must allow its unblocked local launcher script in this process.
+# Without this flag a default Restricted policy accepts inline code but rejects dot-sourcing Launch-EXMail.ps1.
+Assert ($raw-match'(?m)^powershell\.exe -NoLogo -NoProfile -STA -ExecutionPolicy RemoteSigned -Command ') 'BOOTSTRAP_PROCESS_POLICY_MISSING'
+Assert ($raw-notmatch'(?i)Set-ExecutionPolicy|-ExecutionPolicy\s+Bypass') 'PERSISTENT_OR_BYPASS_POLICY_CHANGE'
 . ([scriptblock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encoded)))) -LibraryOnly
 $script:opened=0;$script:stopped=0
 function Assert-EXMailStopped {$script:stopped++}
