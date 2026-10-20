@@ -2,7 +2,7 @@ $ErrorActionPreference='Stop'
 $repo=Split-Path -Parent $PSScriptRoot
 function Assert($Condition,[string]$Message){if(-not$Condition){throw $Message}}
 $root=Join-Path ([IO.Path]::GetTempPath()) ('exmail17-startup-'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($root)
-$batch=Join-Path $repo 'dist/EX메일-익스플로러-자동설치-v17.3-이미지자동전송1.bat'
+$batch=Join-Path $repo 'dist/EX메일-익스플로러-자동설치-v17.3-이미지자동전송2.bat'
 $raw=[IO.File]::ReadAllText($batch);$encoded=[regex]::Match($raw,'(?m)^::EXMAIL_SCRIPT:([A-Za-z0-9+/=]+)').Groups[1].Value
 # The bootstrap must allow its unblocked local launcher script in this process.
 # Without this flag a default Restricted policy accepts inline code but rejects dot-sourcing Launch-EXMail.ps1.

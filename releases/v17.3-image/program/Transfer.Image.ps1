@@ -32,8 +32,8 @@ function Save-TransferReport {
  return $path
 }
 function Send-ImageTransferFile {
- param([string]$Path,[string]$Configuration,[int]$MaxBytes=67108864)
- $script:trialStage='INITIALIZE';$script:sendAttempted=$false;$script:sendClicks=0;$script:captures=0;$script:lastSnapshot=$null
+ param([string]$Path,[string]$Configuration,[int]$MaxBytes=67108864,[string]$ErrorLogDirectory='')
+ $script:trialStage='INITIALIZE';$script:sendAttempted=$false;$script:sendClicks=0;$script:captures=0;$script:lastSnapshot=$null;$script:lastImageBytes=$null
  $script:report=New-Object 'System.Collections.Generic.List[string]';$report=$script:report
  $script:trialName='';$script:trialPath='';$hash='';$mutex=$null;$owned=$false
  function Save-TrialResult([string]$Outcome,[string]$ErrorText=''){
@@ -70,12 +70,34 @@ function Send-ImageTransferFile {
    }
    $bitmap.UnlockBits($lock);$lock=$null
    $found=@([EXMailImageProbe.Detector]::Find($pixels,$w,$h));Assert-TrialWindow
+   $memory=New-Object IO.MemoryStream
+   try{$bitmap.Save($memory,[Drawing.Imaging.ImageFormat]::Png);$script:lastImageBytes=$memory.ToArray()}finally{$memory.Dispose()}
+   foreach($kind in @('SEND','CANCEL')){
+    if(@($found|Where-Object{$_.Kind-eq$kind}).Count-eq0){
+     $native=@(Get-TrialNativeButton $kind $point.X $point.Y)
+     if($native.Count-eq1){$found+=,$native[0]}
+    }
+   }
    $emptyEditor=Test-EmptyEditorEvidence @(Get-TrialControlTexts)
-   $frame=@{plus=@($found|Where-Object{$_.Kind-eq'PLUS'});send=@($found|Where-Object{$_.Kind-eq'SEND'});originX=$point.X;originY=$point.Y;emptyEditor=$emptyEditor}
-   $script:lastSnapshot=@{capture=$script:captures;plusCount=$frame.plus.Count;sendCount=$frame.send.Count;emptyEditor=$emptyEditor;candidates=$found}
-   $report.Add(('Capture {0}: PLUS={1}; SEND={2}; nativeZeroFiles={3}' -f $script:captures,$frame.plus.Count,$frame.send.Count,$emptyEditor))
+   $frame=@{plus=@($found|Where-Object{$_.Kind-eq'PLUS'});send=@($found|Where-Object{$_.Kind-eq'SEND'});cancel=@($found|Where-Object{$_.Kind-eq'CANCEL'});originX=$point.X;originY=$point.Y;emptyEditor=$emptyEditor}
+   $script:lastSnapshot=@{capture=$script:captures;plusCount=$frame.plus.Count;sendCount=$frame.send.Count;cancelCount=$frame.cancel.Count;emptyEditor=$emptyEditor;candidates=$found}
+   $report.Add(('Capture {0}: PLUS={1}; SEND={2}; CANCEL={3}; nativeZeroFiles={4}' -f $script:captures,$frame.plus.Count,$frame.send.Count,$frame.cancel.Count,$emptyEditor))
    return $frame
   }finally{if($lock){$bitmap.UnlockBits($lock)};if($g){$g.Dispose()};$bitmap.Dispose()}
+ }
+ function Get-TrialNativeButton([string]$Kind,[int]$OriginX,[int]$OriginY){
+  $windowRect=[TransferFileDialogV3.Native]::Bounds($script:trialWindow)
+  foreach($child in @(Get-FileDialogChildren $script:trialWindow)){
+   Assert-TransferAbort
+   if(-not[TransferFileDialogV3.Native]::IsWindowVisible($child)-or-not[TransferFileDialogV3.Native]::IsWindowEnabled($child)){continue}
+   if((Get-NativeClass $child)-notmatch'^(Button|WindowsForms10\.BUTTON(?:\..*)?)$'){continue}
+   try{$text=(Read-FileDialogText $child 64 100).Trim().Replace('&','')}catch{continue}
+   $pattern=if($Kind-eq'SEND'){'^(보내기|Send)(\([A-Za-z]\))?$'}else{'^(취소|Cancel)(\([A-Za-z]\))?$'}
+   if($text-notmatch$pattern){continue}
+   $r=[TransferFileDialogV3.Native]::Bounds($child)
+   if($r.Left-lt$windowRect.Left-or$r.Right-gt$windowRect.Right-or$r.Top-lt($windowRect.Top+($windowRect.Bottom-$windowRect.Top)*.8)-or$r.Bottom-gt$windowRect.Bottom){continue}
+   [pscustomobject]@{Kind=$Kind;X=$r.Left-$OriginX;Y=$r.Top-$OriginY;Width=$r.Right-$r.Left;Height=$r.Bottom-$r.Top;Score=1;source='native-caption'}
+  }
  }
  function Get-TrialControlTexts {
   $windowRect=[TransferFileDialogV3.Native]::Bounds($script:trialWindow)
@@ -90,20 +112,10 @@ function Send-ImageTransferFile {
  }
  function Reset-TrialEmptyEditor {
   Assert-TrialWindow
-  if(-not(Test-EmptyEditorEvidence @(Get-TrialControlTexts))){throw 'EMPTY_EDITOR_ZERO_FILES_NOT_CONFIRMED'}
-  $windowRect=[TransferFileDialogV3.Native]::Bounds($script:trialWindow)
-  $buttons=New-Object 'System.Collections.Generic.List[System.IntPtr]'
-  foreach($child in @(Get-FileDialogChildren $script:trialWindow)){
-   if(-not[TransferFileDialogV3.Native]::IsWindowVisible($child)-or-not[TransferFileDialogV3.Native]::IsWindowEnabled($child)){continue}
-   if((Get-NativeClass $child)-notmatch'^(Button|WindowsForms10\.BUTTON(?:\..*)?)$'){continue}
-   try{$text=(Read-FileDialogText $child 64 100).Trim().Replace('&','')}catch{continue}
-   if($text-notmatch'^(취소|Cancel)(\([A-Za-z]\))?$'){continue}
-   $r=[TransferFileDialogV3.Native]::Bounds($child)
-   if($r.Left-lt$windowRect.Left-or$r.Right-gt$windowRect.Right-or$r.Top-lt($windowRect.Top+($windowRect.Bottom-$windowRect.Top)*.8)-or$r.Bottom-gt$windowRect.Bottom){continue}
-   $buttons.Add($child)
-  }
-  if($buttons.Count-ne1){throw 'EMPTY_EDITOR_CANCEL_NOT_FOUND_USE_CANCEL_MANUALLY'}
-  Invoke-DialogControlClick $script:trialWindow $buttons[0]
+  if($script:sendAttempted){throw 'SEND_ALREADY_ATTEMPTED'}
+  $editor=Get-TrialSnapshot
+  if(@($editor.plus).Count-ne0-or@($editor.send).Count-ne1-or@($editor.cancel).Count-ne1){throw 'EDITOR_CANCEL_NOT_UNIQUE'}
+  Invoke-TrialClick 'CANCEL' $editor.cancel[0]
   $deadline=[DateTime]::UtcNow.AddSeconds(8)
   do{$frame=Get-TrialSnapshot;if(@($frame.plus).Count-eq1-and@($frame.send).Count-eq0){return};Start-Sleep -Milliseconds 250}while([DateTime]::UtcNow-lt$deadline)
   throw 'EMPTY_EDITOR_RESET_NOT_CONFIRMED'
@@ -111,15 +123,20 @@ function Send-ImageTransferFile {
  function Test-TrialFileRegistered {
   # Native control text, not UI Automation. Never send if the unique test filename cannot be read back.
   foreach($child in @(Get-FileDialogChildren $script:trialWindow)){
+   Assert-TransferAbort
    if(-not[TransferFileDialogV3.Native]::IsWindowVisible($child)){continue}
-   try{$text=Read-FileDialogText $child 2048 100;if($text.Trim()-ceq$script:trialName){return $true}}catch{}
+   $wr=[TransferFileDialogV3.Native]::Bounds($script:trialWindow);$r=[TransferFileDialogV3.Native]::Bounds($child)
+   if($r.Left-lt$wr.Left-or$r.Right-gt$wr.Right-or$r.Top-lt$wr.Top-or$r.Bottom-gt$wr.Bottom){continue}
+   try{$text=Read-FileDialogText $child 2048 100;if(Test-ImageRegisteredName $text $script:trialName $script:trialPath){$report.Add('Registered filename identity verified (full unique ID)');return $true}}catch{}
   }
   return $false
  }
  function Invoke-TrialClick([string]$Kind,$Expected){
-  $fresh=Get-TrialSnapshot;$items=if($Kind-eq'PLUS'){@($fresh.plus)}else{@($fresh.send)}
+  $fresh=Get-TrialSnapshot;$items=switch($Kind){'PLUS'{@($fresh.plus)};'SEND'{@($fresh.send)};'CANCEL'{@($fresh.cancel)};default{throw 'CLICK_KIND_INVALID'}}
+  $items=@($items)
   if($items.Count-ne1){throw 'CLICK_TARGET_NOT_UNIQUE'}
   if(($Kind-eq'PLUS'-and@($fresh.send).Count-ne0)-or($Kind-eq'SEND'-and@($fresh.plus).Count-ne0)){throw 'CLICK_SCREEN_STATE_CHANGED'}
+  if($Kind-eq'CANCEL'-and($script:sendAttempted-or@($fresh.plus).Count-ne0-or@($fresh.send).Count-ne1)){throw 'CANCEL_SCREEN_STATE_CHANGED'}
   $target=$items[0]
   if([Math]::Abs($target.X-$Expected.X)-gt3-or[Math]::Abs($target.Y-$Expected.Y)-gt3-or[Math]::Abs($target.Width-$Expected.Width)-gt3-or[Math]::Abs($target.Height-$Expected.Height)-gt3){throw 'CLICK_TARGET_MOVED'}
   if($Kind-eq'SEND'){
@@ -130,7 +147,12 @@ function Send-ImageTransferFile {
   $p=New-Object TransferFileDialogV3.Point;$p.X=$fresh.originX+$target.X+[int]($target.Width/2);$p.Y=$fresh.originY+$target.Y+[int]($target.Height/2)
   $hit=[TransferFileDialogV3.Native]::WindowFromPoint($p)
   if($hit-ne$script:trialWindow-and-not[TransferFileDialogV3.Native]::IsChild($script:trialWindow,$hit)){throw 'CLICK_TARGET_OCCLUDED'}
-  [void](Set-TransferCursorPosition $p.X $p.Y);Assert-TrialWindow
+  if(-not(Set-TransferCursorPosition $p.X $p.Y)){throw 'CURSOR_MOVE_FAILED'}
+  Assert-TrialWindow
+  $cursor=New-Object MailBridge.Point
+  if(-not[MailBridge.Native]::GetCursorPos([ref]$cursor)-or[Math]::Abs($cursor.X-$p.X)-gt2-or[Math]::Abs($cursor.Y-$p.Y)-gt2){throw 'CURSOR_POSITION_NOT_CONFIRMED'}
+  $hit=[TransferFileDialogV3.Native]::WindowFromPoint($p)
+  if($hit-ne$script:trialWindow-and-not[TransferFileDialogV3.Native]::IsChild($script:trialWindow,$hit)){throw 'CLICK_TARGET_OCCLUDED'}
   if($Kind-eq'SEND'){$script:sendAttempted=$true;Save-TrialResult 'SEND_ATTEMPT_STARTED'}
   [TransferFileDialogV3.Native]::mouse_event(2,0,0,0,[UIntPtr]::Zero);[TransferFileDialogV3.Native]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
   if($Kind-eq'SEND'){$script:sendClicks++;Save-TrialResult 'SEND_CLICKED_ONCE'}
@@ -195,6 +217,11 @@ function Send-ImageTransferFile {
   if($code-eq'USER_ABORTED_F4'){$code='USER_ABORTED'}
   if($code-cnotmatch'^[A-Z][A-Z0-9_]+$'){$code='IMAGE_TRANSFER_FAILED'}
   $report.Add('Failure stage='+$script:trialStage+'; code='+$code)
+  try{
+   $errorFolder=if($ErrorLogDirectory){$ErrorLogDirectory}else{Join-Path $PSScriptRoot 'logs'};[void][IO.Directory]::CreateDirectory($errorFolder)
+   if($script:lastImageBytes){[IO.File]::WriteAllBytes((Join-Path $errorFolder 'ImageTransfer-last-error.png'),$script:lastImageBytes)}
+   Write-BridgeJson (Join-Path $errorFolder 'ImageTransfer-last-error.json') @{stage=$script:trialStage;error=$code;clicked=$script:sendAttempted;snapshot=$script:lastSnapshot;at=[DateTime]::UtcNow.ToString('o')}
+  }catch{}
  }finally{
   if($owned){$mutex.ReleaseMutex()};if($mutex){$mutex.Dispose()}
   if($script:lastSnapshot){$report.Add('Last image: '+($script:lastSnapshot|ConvertTo-Json -Depth 5 -Compress))}

@@ -176,7 +176,8 @@ function Get-BridgeSendFailureMessage {
         'INPUT_HOOK_UNAVAILABLE' { return '입력 보호를 시작하지 못해 작업을 중단했습니다.' }
         'ANOTHER_INPUT_GUARD_IS_RUNNING' { return '이 PC에서 다른 자동화 작업이 실행 중입니다.' }
         'TRANSFER_SUBMITTED_UNCONFIRMED' { return '자료교환 보내기는 눌렀지만 완료를 확인하지 못했습니다. 다시 누르기 전에 자료교환 보내기 목록을 확인하세요.' }
-         'EMPTY_SEND_LIST_NOT_CONFIRMED' { return '자료교환 보내기 목록을 비우고 초기 ＋ 화면으로 돌아온 뒤 다시 실행하세요.' }
+         'EDITOR_CANCEL_NOT_UNIQUE' { return '자료교환의 취소 버튼을 확인하지 못했습니다. 직접 취소한 뒤 다시 실행하세요.' }
+        'EMPTY_SEND_LIST_NOT_CONFIRMED' { return '자료교환 보내기 목록을 비우고 초기 ＋ 화면으로 돌아온 뒤 다시 실행하세요.' }
         'SEND_EDITOR_VIEW_USE_CANCEL_AND_RETRY' { return '자료교환의 취소를 눌러 초기 ＋ 화면으로 돌아온 뒤 다시 실행하세요.' }
         'EMPTY_EDITOR_CANCEL_NOT_FOUND_USE_CANCEL_MANUALLY' { return '자료교환의 취소를 눌러 초기 ＋ 화면으로 돌아온 뒤 다시 실행하세요.' }
         'TEST_FILE_REGISTRATION_NOT_CONFIRMED' { return '자료교환에 보낼 파일이 등록됐는지 확인하지 못했습니다. 보내기는 누르지 않았습니다.' }

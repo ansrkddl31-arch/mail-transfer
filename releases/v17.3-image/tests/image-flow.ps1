@@ -49,12 +49,15 @@ foreach($scenario in @('emptyEditorReset','noZeroEvidence','resetFails','resetSt
  try{
   [void](Invoke-ImageSendTrial -Snapshot $snapshot -Click {param($kind,$candidate) $script:clicks.Add($kind)} -Register {} -WaitReady {return @{registered=$true;plus=@();send=@($button);emptyEditor=($scenario-eq'readyStillZero')}} -WaitEmpty {$true} -Stage {} -ResetEmptyEditor $reset)
  }catch{$caught=$_.Exception.Message}
- if($scenario-eq'emptyEditorReset'){
+ if($scenario-in@('emptyEditorReset','noZeroEvidence')){
   Assert (-not$caught-and$script:resetCount-eq1-and$script:clicks.Count-eq2) 'EMPTY_EDITOR_RESET_FAILED'
  }else{
   Assert ([bool]$caught) ('UNEXPECTED_SUCCESS: '+$scenario)
   Assert (@($script:clicks|Where-Object{$_-eq'SEND'}).Count-eq0) ('UNSAFE_SEND: '+$scenario)
-  if($scenario-eq'noZeroEvidence'){Assert ($script:resetCount-eq0) 'RESET_WITHOUT_ZERO_EVIDENCE'}
  }
  Write-Host ('PASS empty-editor scenario '+$scenario)
 }
+$id='a'*32;$name='MailTransfer-Request-'+$id+'.txt';$full='C:\outbox\'+$name
+foreach($text in @($name,('MailTransfer-Request-'+$id),$full,('"'+$full+'"'))){Assert (Test-ImageRegisteredName $text $name $full) ('VALID_ID_REJECTED: '+$text)}
+foreach($text in @(('MailTransfer-Request-'+('b'*32)+'.txt'),($name+'.bad'),('MailTransfer-Request-'+$id.Substring(0,15)+'...'),'total 1 files')){Assert (-not(Test-ImageRegisteredName $text $name $full)) ('FALSE_ID_ACCEPTED: '+$text)}
+'PASS registered unique ID: basename, hidden extension and full path accepted; other IDs and truncated names rejected'

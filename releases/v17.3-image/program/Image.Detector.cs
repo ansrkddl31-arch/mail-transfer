@@ -14,9 +14,15 @@ namespace EXMailImageProbe {
   static bool Light(byte[] p,int w,int x,int y) {
    int i=(y*w+x)*3;return p[i]>=225&&p[i+1]>=225&&p[i+2]>=225;
   }
-  static bool Green(byte[] p,int w,int x,int y) {
+  static bool SendColor(byte[] p,int w,int x,int y) {
    int i=(y*w+x)*3,r=p[i],g=p[i+1],b=p[i+2];
-   return r>=45&&r<=145&&g>=145&&g<=220&&b>=120&&b<=200&&g-r>=35&&b-r>=20;
+   bool teal=r>=45&&r<=145&&g>=145&&g<=220&&b>=120&&b<=200&&g-r>=35&&b-r>=20;
+   bool blue=r>=35&&r<=130&&g>=90&&g<=180&&b>=190&&b<=255&&b-g>=50&&g-r>=25;
+   return teal||blue;
+  }
+  static bool CancelGray(byte[] p,int w,int x,int y) {
+   int i=(y*w+x)*3,r=p[i],g=p[i+1],b=p[i+2];
+   return r>=145&&r<=215&&Math.Abs(r-g)<12&&Math.Abs(r-b)<12;
   }
   public static Candidate[] Find(byte[] p,int w,int h) {
    if(w<100||h<150||p==null||p.Length!=(long)w*h*3)throw new ArgumentException("INVALID_IMAGE");
@@ -49,18 +55,33 @@ namespace EXMailImageProbe {
      if(!duplicate)found.Add(c);
     }
    }
-   // Connected green regions. Rectangular lower buttons only; reject arrow circles/header.
+   // Internal blue and external teal send buttons; reject arrow circles/header.
    var seen=new bool[w*h];var queue=new Queue<int>();
    for(int y=h*7/10;y<h;y++)for(int x=0;x<w;x++) {
-    int index=y*w+x;if(seen[index]||!Green(p,w,x,y))continue;
+    int index=y*w+x;if(seen[index]||!SendColor(p,w,x,y))continue;
     seen[index]=true;queue.Enqueue(index);int minX=x,maxX=x,minY=y,maxY=y,count=0;
     while(queue.Count>0){int v=queue.Dequeue(),xx=v%w,yy=v/w;count++;minX=Math.Min(minX,xx);maxX=Math.Max(maxX,xx);minY=Math.Min(minY,yy);maxY=Math.Max(maxY,yy);
      int[] ns={v-1,v+1,v-w,v+w};
-     for(int n=0;n<4;n++){int q=ns[n];if(q<0||q>=w*h||Math.Abs(q%w-xx)+Math.Abs(q/w-yy)!=1||seen[q])continue;if(Green(p,w,q%w,q/w)){seen[q]=true;queue.Enqueue(q);}}
+     for(int n=0;n<4;n++){int q=ns[n];if(q<0||q>=w*h||Math.Abs(q%w-xx)+Math.Abs(q/w-yy)!=1||seen[q])continue;if(SendColor(p,w,q%w,q/w)){seen[q]=true;queue.Enqueue(q);}}
     }
     int bw=maxX-minX+1,bh=maxY-minY+1;double fill=count/(double)(bw*bh),aspect=bw/(double)bh;
     if(bw<w*.15||bw>w*.48||bh<Math.Max(16,h*.025)||bh>h*.13||aspect<1.7||aspect>5||fill<.8)continue;
     found.Add(new Candidate{Kind="SEND",X=minX,Y=minY,Width=bw,Height=bh,Score=fill});
+   }
+   // The supplied editor has a gray Cancel rectangle left of the green Send.
+   Array.Clear(seen,0,seen.Length);
+   for(int y=h*82/100;y<h;y++)for(int x=0;x<w/2;x++){
+    int index=y*w+x;if(seen[index]||!CancelGray(p,w,x,y))continue;
+    seen[index]=true;queue.Enqueue(index);int minX=x,maxX=x,minY=y,maxY=y,count=0;
+    while(queue.Count>0){int v=queue.Dequeue(),xx=v%w,yy=v/w;count++;minX=Math.Min(minX,xx);maxX=Math.Max(maxX,xx);minY=Math.Min(minY,yy);maxY=Math.Max(maxY,yy);
+     int[] ns={v-1,v+1,v-w,v+w};
+     for(int n=0;n<4;n++){int q=ns[n];if(q<0||q>=w*h||q%w>=w/2||Math.Abs(q%w-xx)+Math.Abs(q/w-yy)!=1||seen[q])continue;if(CancelGray(p,w,q%w,q/w)){seen[q]=true;queue.Enqueue(q);}}
+    }
+    int bw=maxX-minX+1,bh=maxY-minY+1;double fill=count/(double)(bw*bh),aspect=bw/(double)bh;
+    if(bw<w*.15||bw>w*.48||bh<Math.Max(16,h*.025)||bh>h*.13||aspect<1.7||aspect>5||fill<.78)continue;
+    bool paired=false;
+    foreach(var send in found)if(send.Kind=="SEND"&&minX+bw<send.X&&Math.Abs(minY-send.Y)<=Math.Max(4,bh*.2)&&Math.Abs(bh-send.Height)<=Math.Max(4,bh*.2)){paired=true;break;}
+    if(paired)found.Add(new Candidate{Kind="CANCEL",X=minX,Y=minY,Width=bw,Height=bh,Score=fill});
    }
    return found.ToArray();
   }

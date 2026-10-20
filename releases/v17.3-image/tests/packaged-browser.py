@@ -3,7 +3,7 @@ import websockets
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 PWSH=os.environ.get('PWSH','/tmp/exmail-pwsh/runtime/pwsh')
 async def main():
- html=(ROOT/'dist/EX메일-익스플로러-설치-v17.3-이미지자동전송1.html').read_text()
+ html=(ROOT/'dist/EX메일-익스플로러-설치-v17.3-이미지자동전송2.html').read_text()
  bat=base64.b64decode(re.search(r"const INSTALL_BAT='([^']+)'",html)[1]).decode('ascii')
  bundle=base64.b64decode(re.search(r'^::EXMAIL_ZIP:([A-Za-z0-9+/=]+)',bat,re.M)[1])
  with tempfile.TemporaryDirectory(prefix='exmail-package-') as tmp:
@@ -43,7 +43,7 @@ async def main():
       await asyncio.sleep(.1)
       if await evaluate("document.getElementById('refresh')?.textContent==='외부 연결'"):break
      assert not await evaluate("document.getElementById('firstTransferSetup').open")
-     assert await evaluate("document.getElementById('appVersion').textContent==='앱 v17.3'")
+     assert await evaluate("document.getElementById('appVersion').textContent==='앱 v17.3 · 이미지2'")
      assert json.load(urllib.request.urlopen(url+'api/state'))['transferReady']
      assert not bool(list(state.rglob('image-test-requested')))
      image=await call('Page.captureScreenshot',{'format':'png'});(ROOT/'dist/이미지자동전송-실제앱.png').write_bytes(base64.b64decode(image['data']))

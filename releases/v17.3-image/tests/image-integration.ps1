@@ -45,20 +45,20 @@ try{
  foreach($kind in @('Request','Result','Probe','Attachment')){
   $id=[guid]::NewGuid().ToString('N');$name='MailTransfer-'+$kind+'-'+$id+$(if($kind-eq'Attachment'){'.xlsx'}else{'.txt'})
   $path=Join-Path $root $name;[IO.File]::WriteAllText($path,'test payload')
-  $script:scenario='success';$outcome=Send-ImageTransferFile $path (Join-Path $root 'nonexistent-settings.json')
+  $script:scenario='success';$outcome=Send-ImageTransferFile $path (Join-Path $root 'nonexistent-settings.json') -ErrorLogDirectory (Join-Path $root 'error-logs')
   Assert ($outcome.result-eq'SUBMITTED_UI_CONFIRMED'-and$outcome.clicked-and$outcome.name-ceq$name) ('SEND_ADAPTER_FAILED_'+$kind)
  }
  $path=Join-Path $root ('MailTransfer-Request-'+('a'*32)+'.txt');[IO.File]::WriteAllText($path,'test')
  foreach($mode in @('beforeClickFailure','afterClickFailure','cancelled')){
-  $script:scenario=$mode;$outcome=Send-ImageTransferFile $path (Join-Path $root 'missing-settings.json')
+  $script:scenario=$mode;$outcome=Send-ImageTransferFile $path (Join-Path $root 'missing-settings.json') -ErrorLogDirectory (Join-Path $root 'error-logs')
   if($mode-eq'beforeClickFailure'){Assert ($outcome.result-eq'FAILED'-and-not$outcome.clicked) 'PRE_CLICK_FAILURE_MISREPORTED'}
   else{Assert ($outcome.result-eq'SUBMITTED_UI_UNCONFIRMED'-and$outcome.clicked) 'POST_CLICK_FAILURE_RETRY_RISK'}
   if($mode-eq'cancelled'){Assert ($outcome.error-eq'USER_ABORTED') 'F4_ERROR_NOT_MAPPED'}
  }
- $outcome=Send-ImageTransferFile $path (Join-Path $root 'missing-settings.json') -MaxBytes 1
+ $outcome=Send-ImageTransferFile $path (Join-Path $root 'missing-settings.json') -ErrorLogDirectory (Join-Path $root 'error-logs') -MaxBytes 1
  Assert ($outcome.result-eq'FAILED'-and-not$outcome.clicked-and$outcome.error-eq'TRANSFER_FILE_SIZE_INVALID') 'SIZE_LIMIT_FAILED'
  $bad=Join-Path $root 'arbitrary.txt';[IO.File]::WriteAllText($bad,'test')
- $outcome=Send-ImageTransferFile $bad (Join-Path $root 'missing-settings.json')
+ $outcome=Send-ImageTransferFile $bad (Join-Path $root 'missing-settings.json') -ErrorLogDirectory (Join-Path $root 'error-logs')
  Assert ($outcome.result-eq'FAILED'-and-not$outcome.clicked-and$outcome.error-eq'TRANSFER_FILENAME_INVALID') 'ARBITRARY_FILENAME_ACCEPTED'
  'PASS real app sender adapter: request/result/probe/attachment, no settings file, before/after click failure, F4, file validation; only Windows interactions mocked'
  $send=[IO.File]::ReadAllText((Join-Path $program 'Send-Packet.ps1'));$setup=[IO.File]::ReadAllText((Join-Path $program 'Setup-Transfer.ps1'))

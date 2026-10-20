@@ -5,3 +5,4 @@ __pycache__/
 .test-output/
 bridge-settings.json
 tools/transfer-image-probe/logs/
+releases/**/program/logs/
