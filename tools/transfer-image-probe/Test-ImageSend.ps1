@@ -1,11 +1,11 @@
 ﻿param()
 $ErrorActionPreference='Stop'
-$script:trialStage='INITIALIZE';$script:sendAttempted=$false;$script:sendClicks=0;$script:captures=0
+$script:trialStage='INITIALIZE';$script:sendAttempted=$false;$script:sendClicks=0;$script:captures=0;$script:lastSnapshot=$null
 $report=New-Object 'System.Collections.Generic.List[string]'
 $trialMutex=$null;$owned=$false;$run=$null
 function Save-TrialResult([string]$Outcome,[string]$ErrorText=''){
  if(-not$run){return}
- $record=@{at=(Get-Date).ToString('o');stage=$script:trialStage;outcome=$Outcome;error=$ErrorText;sendAttempted=$script:sendAttempted;sendClicks=$script:sendClicks;testFile=$script:trialName;receiptVerified=$false;details=@($report.ToArray())}
+ $record=@{at=(Get-Date).ToString('o');stage=$script:trialStage;outcome=$Outcome;error=$ErrorText;sendAttempted=$script:sendAttempted;sendClicks=$script:sendClicks;testFile=$script:trialName;receiptVerified=$false;lastSnapshot=$script:lastSnapshot;details=@($report.ToArray())}
  [IO.File]::WriteAllText((Join-Path $run 'result.json'),($record|ConvertTo-Json -Depth 8),(New-Object Text.UTF8Encoding($true)))
 }
 try{
@@ -56,8 +56,43 @@ try{
    }
    $bitmap.UnlockBits($lock);$lock=$null
    $found=@([EXMailImageProbe.Detector]::Find($pixels,$w,$h));Assert-TrialWindow
-   return @{plus=@($found|Where-Object{$_.Kind-eq'PLUS'});send=@($found|Where-Object{$_.Kind-eq'SEND'});originX=$point.X;originY=$point.Y}
+   $emptyEditor=Test-EmptyEditorEvidence @(Get-TrialControlTexts)
+   $frame=@{plus=@($found|Where-Object{$_.Kind-eq'PLUS'});send=@($found|Where-Object{$_.Kind-eq'SEND'});originX=$point.X;originY=$point.Y;emptyEditor=$emptyEditor}
+   $script:lastSnapshot=@{capture=$script:captures;plusCount=$frame.plus.Count;sendCount=$frame.send.Count;emptyEditor=$emptyEditor;candidates=$found}
+   $report.Add(('Capture {0}: PLUS={1}; SEND={2}; nativeZeroFiles={3}' -f $script:captures,$frame.plus.Count,$frame.send.Count,$emptyEditor))
+   return $frame
   }finally{if($lock){$bitmap.UnlockBits($lock)};if($g){$g.Dispose()};$bitmap.Dispose()}
+ }
+ function Get-TrialControlTexts {
+  $windowRect=[TransferFileDialogV3.Native]::Bounds($script:trialWindow)
+  foreach($child in @(Get-FileDialogChildren $script:trialWindow)){
+   Assert-TransferAbort
+   if(-not[TransferFileDialogV3.Native]::IsWindowVisible($child)){continue}
+   if((Get-NativeClass $child)-match'^(Edit|WindowsForms10\.EDIT)'){continue}
+   $r=[TransferFileDialogV3.Native]::Bounds($child)
+   if($r.Left-lt$windowRect.Left-or$r.Right-gt$windowRect.Right-or$r.Top-lt($windowRect.Top+($windowRect.Bottom-$windowRect.Top)*.65)-or$r.Bottom-gt$windowRect.Bottom){continue}
+   try{Read-FileDialogText $child 256 100}catch{}
+  }
+ }
+ function Reset-TrialEmptyEditor {
+  Assert-TrialWindow
+  if(-not(Test-EmptyEditorEvidence @(Get-TrialControlTexts))){throw 'EMPTY_EDITOR_ZERO_FILES_NOT_CONFIRMED'}
+  $windowRect=[TransferFileDialogV3.Native]::Bounds($script:trialWindow)
+  $buttons=New-Object 'System.Collections.Generic.List[System.IntPtr]'
+  foreach($child in @(Get-FileDialogChildren $script:trialWindow)){
+   if(-not[TransferFileDialogV3.Native]::IsWindowVisible($child)-or-not[TransferFileDialogV3.Native]::IsWindowEnabled($child)){continue}
+   if((Get-NativeClass $child)-notmatch'^(Button|WindowsForms10\.BUTTON(?:\..*)?)$'){continue}
+   try{$text=(Read-FileDialogText $child 64 100).Trim().Replace('&','')}catch{continue}
+   if($text-notmatch'^(취소|Cancel)(\([A-Za-z]\))?$'){continue}
+   $r=[TransferFileDialogV3.Native]::Bounds($child)
+   if($r.Left-lt$windowRect.Left-or$r.Right-gt$windowRect.Right-or$r.Top-lt($windowRect.Top+($windowRect.Bottom-$windowRect.Top)*.8)-or$r.Bottom-gt$windowRect.Bottom){continue}
+   $buttons.Add($child)
+  }
+  if($buttons.Count-ne1){throw 'EMPTY_EDITOR_CANCEL_NOT_FOUND_USE_CANCEL_MANUALLY'}
+  Invoke-DialogControlClick $script:trialWindow $buttons[0]
+  $deadline=[DateTime]::UtcNow.AddSeconds(8)
+  do{$frame=Get-TrialSnapshot;if(@($frame.plus).Count-eq1-and@($frame.send).Count-eq0){return};Start-Sleep -Milliseconds 250}while([DateTime]::UtcNow-lt$deadline)
+  throw 'EMPTY_EDITOR_RESET_NOT_CONFIRMED'
  }
  function Test-TrialFileRegistered {
   # Native control text, not UI Automation. Never send if the unique test filename cannot be read back.
@@ -75,6 +110,7 @@ try{
   if([Math]::Abs($target.X-$Expected.X)-gt3-or[Math]::Abs($target.Y-$Expected.Y)-gt3-or[Math]::Abs($target.Width-$Expected.Width)-gt3-or[Math]::Abs($target.Height-$Expected.Height)-gt3){throw 'CLICK_TARGET_MOVED'}
   if($Kind-eq'SEND'){
    if($script:sendAttempted){throw 'SEND_ALREADY_ATTEMPTED'}
+   if($fresh.emptyEditor){throw 'SEND_LIST_STILL_ZERO_FILES'}
    if(-not(Test-TrialFileRegistered)){throw 'TEST_FILENAME_NOT_VERIFIED'}
   }
   $p=New-Object TransferFileDialogV3.Point;$p.X=$fresh.originX+$target.X+[int]($target.Width/2);$p.Y=$fresh.originY+$target.Y+[int]($target.Height/2)
@@ -106,14 +142,14 @@ try{
  }
  function Wait-TrialReady {
   $deadline=[DateTime]::UtcNow.AddSeconds(15)
-  do{$frame=Get-TrialSnapshot;$frame.registered=Test-TrialFileRegistered;if($frame.registered-and@($frame.send).Count-eq1){return $frame};Start-Sleep -Milliseconds 300}while([DateTime]::UtcNow-lt$deadline)
+  do{$frame=Get-TrialSnapshot;$frame.registered=Test-TrialFileRegistered;if($frame.registered-and-not$frame.emptyEditor-and@($frame.send).Count-eq1){return $frame};Start-Sleep -Milliseconds 300}while([DateTime]::UtcNow-lt$deadline)
   throw 'TEST_FILE_REGISTRATION_NOT_CONFIRMED'
  }
  function Wait-TrialEmpty {
   $deadline=[DateTime]::UtcNow.AddSeconds(20);$stable=0
   do{
    $frame=Get-TrialSnapshot
-   if(@($frame.plus).Count-eq1-and@($frame.send).Count-eq0){$stable++}else{$stable=0}
+   if((@($frame.plus).Count-eq1-and@($frame.send).Count-eq0)-or$frame.emptyEditor){$stable++}else{$stable=0}
    if($stable-ge2){return $true}
    Start-Sleep -Milliseconds 400
   }while([DateTime]::UtcNow-lt$deadline)
@@ -124,13 +160,14 @@ try{
  for($i=8;$i-ge1;$i--){Assert-TransferAbort;Write-Host ($i.ToString()+'...');Start-Sleep -Seconds 1}
  $script:trialWindow=[EXMailImageTrial.Native]::GetForegroundWindow()
  if(-not[EXMailImageTrial.Native]::GetTitle($script:trialWindow).Contains('자료교환')){throw 'TRANSFER_WINDOW_NOT_FOREGROUND'}
- $outcome=Invoke-ImageSendTrial -Snapshot {Get-TrialSnapshot} -Click {param($kind,$candidate) Invoke-TrialClick $kind $candidate} -Register {Register-TrialFile} -WaitReady {Wait-TrialReady} -WaitEmpty {Wait-TrialEmpty} -Stage {param($name) $script:trialStage=$name;Write-Host $name;Save-TrialResult 'RUNNING'}
+ $outcome=Invoke-ImageSendTrial -Snapshot {Get-TrialSnapshot} -Click {param($kind,$candidate) Invoke-TrialClick $kind $candidate} -Register {Register-TrialFile} -WaitReady {Wait-TrialReady} -WaitEmpty {Wait-TrialEmpty} -ResetEmptyEditor {Reset-TrialEmptyEditor} -Stage {param($name) $script:trialStage=$name;Write-Host $name;Save-TrialResult 'RUNNING'}
  Save-TrialResult $outcome
  Write-Host '보내기를 한 번 누른 뒤 빈 목록 복귀를 확인했습니다. 반대편 수신 파일까지 확인해야 전송 성공입니다.' -ForegroundColor Green
  Write-Host ('반대편에서 찾을 파일: '+$script:trialName)
 }catch{
  $errorText=$_.Exception.Message;Save-TrialResult 'STOPPED_OR_UNCONFIRMED' $errorText
  Write-Host ('중지: '+$errorText) -ForegroundColor Red
+ if($errorText-in@('SEND_EDITOR_VIEW_USE_CANCEL_AND_RETRY','EMPTY_EDITOR_CANCEL_NOT_FOUND_USE_CANCEL_MANUALLY','EMPTY_EDITOR_ZERO_FILES_NOT_CONFIRMED')){Write-Host '자료교환의 취소를 눌러 가운데 동그란 +가 있는 초기 화면으로 돌아온 뒤 다시 실행하세요.' -ForegroundColor Yellow}
  if($script:sendAttempted){Write-Host '이미 보내기를 시도했습니다. 반대편 수신 여부를 먼저 확인하세요. 자동 재전송하지 않습니다.'}
 }finally{
  if($owned){$trialMutex.ReleaseMutex()};if($trialMutex){$trialMutex.Dispose()}

@@ -15,7 +15,7 @@ with zipfile.ZipFile(target) as archive:
 print(target)
 
 # Explicitly separate the real-send trial from the read-only diagnostic.
-trial_target = root / 'releases/image-probe-v2/자료교환-이미지전송-시험-v2.zip'
+trial_target = root / 'releases/image-probe-v3/자료교환-이미지전송-시험-v3.zip'
 trial_target.parent.mkdir(parents=True, exist_ok=True)
 trial_files = ['Detector.cs', 'Trial.Native.cs', 'Trial.Flow.ps1', 'Transfer.Helpers.ps1',
                'Test-ImageSend.ps1', '이미지전송시험.bat',

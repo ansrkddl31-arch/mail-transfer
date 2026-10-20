@@ -33,3 +33,28 @@ foreach($name in @('Test-ImageSend.ps1','Trial.Flow.ps1','Transfer.Helpers.ps1')
 }
 Add-Type -Path (Join-Path $root 'Trial.Native.cs')
 'PASS all sender/helper scripts parse and native declarations compile. Windows interaction is NOT executed.'
+Assert (Test-EmptyEditorEvidence @('총 0개 파일, 0 Bytes')) 'KOREAN_EMPTY_COUNTER_REJECTED'
+Assert (Test-EmptyEditorEvidence @('총 0 개 파일, 0 바이트')) 'SPACED_EMPTY_COUNTER_REJECTED'
+foreach($text in @('총 1개 파일, 0 Bytes','총 10개 파일, 0 Bytes','총 0개 파일, 157 Bytes','총 0개 파일, 0 Bytes.txt','0개 파일')){
+ Assert (-not(Test-EmptyEditorEvidence @($text))) ('FALSE_EMPTY_COUNTER: '+$text)
+}
+foreach($scenario in @('emptyEditorReset','noZeroEvidence','resetFails','resetStillEditor','readyStillZero')){
+ $script:reads=0;$script:resetCount=0;$script:clicks=New-Object 'System.Collections.Generic.List[string]';$caught=''
+ $snapshot={
+  $script:reads++
+  if($script:reads-eq1-or$scenario-eq'resetStillEditor'){return @{plus=@();send=@($button);emptyEditor=($scenario-ne'noZeroEvidence')}}
+  return @{plus=@($button);send=@();emptyEditor=$false}
+ }
+ $reset={$script:resetCount++;if($scenario-eq'resetFails'){throw 'CANCEL_NOT_FOUND'}}
+ try{
+  [void](Invoke-ImageSendTrial -Snapshot $snapshot -Click {param($kind,$candidate) $script:clicks.Add($kind)} -Register {} -WaitReady {return @{registered=$true;plus=@();send=@($button);emptyEditor=($scenario-eq'readyStillZero')}} -WaitEmpty {$true} -Stage {} -ResetEmptyEditor $reset)
+ }catch{$caught=$_.Exception.Message}
+ if($scenario-eq'emptyEditorReset'){
+  Assert (-not$caught-and$script:resetCount-eq1-and$script:clicks.Count-eq2) 'EMPTY_EDITOR_RESET_FAILED'
+ }else{
+  Assert ([bool]$caught) ('UNEXPECTED_SUCCESS: '+$scenario)
+  Assert (@($script:clicks|Where-Object{$_-eq'SEND'}).Count-eq0) ('UNSAFE_SEND: '+$scenario)
+  if($scenario-eq'noZeroEvidence'){Assert ($script:resetCount-eq0) 'RESET_WITHOUT_ZERO_EVIDENCE'}
+ }
+ Write-Host ('PASS empty-editor scenario '+$scenario)
+}
