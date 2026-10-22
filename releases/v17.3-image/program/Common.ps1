@@ -114,6 +114,11 @@ function Unprotect-BridgeCredential {
 function Get-BridgeTransferConfiguration {
     # Per-role path anchors transfer-launch.json only; image sender never reads saved coordinates.
     param([ValidateSet('Internal','External')][string]$Role)
+    $portableRoot=[Environment]::GetEnvironmentVariable('EXMAIL_PORTABLE_STATE_ROOT')
+    if(-not[string]::IsNullOrWhiteSpace($portableRoot)){
+        if(-not[IO.Path]::IsPathRooted($portableRoot)){throw 'PORTABLE_STATE_ROOT_INVALID'}
+        return (Join-Path (Join-Path (Join-Path $portableRoot 'Transfer') $Role) 'sender-settings.json')
+    }
     return (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('MailTransferBridge\Transfer\' + $Role + '\sender-settings.json'))
 }
 function Test-BridgeTransferReady {
